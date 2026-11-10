@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.0.1
+// @version      2.1.0
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -107,7 +107,7 @@
       .btns { display:flex; gap:8px; justify-content:flex-end; }
       .ver { font-size:12px; font-weight:400; color:#52606d; }
     </style>
-    <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><button class="gear" type="button">설정</button></div>
+    <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><button class="start primary" type="button" hidden>예약 대기 시작</button><button class="gear" type="button">설정</button></div>
     <form class="panel" hidden></form>`;
   document.documentElement.appendChild(host);
   const $msg = ui.querySelector('.msg');
@@ -274,5 +274,15 @@
   }
 
   if (location.pathname.startsWith('/mypage/reservation_ready/')) fillReservation();
-  else waitOnSchedule();
+  else showStart();
+
+  // 일정 페이지는 평소에도 여는 곳이라, 버튼을 눌러야 대기를 시작 (설정을 먼저 확인·변경할 수 있게)
+  function showStart() {
+    if (new Date(CONFIG.date + 'T23:59:59') < new Date()) { status(`출조일(${CONFIG.date})이 이미 지났습니다. 설정에서 날짜를 바꾸세요.`); return; }
+    const ship = shipNames.length ? ` ${shipNames.join('/')}` : '';
+    status(`${M}월 ${D}일${ship}: 설정을 확인하고 준비되면 "예약 대기 시작"을 누르세요.`);
+    const btn = ui.querySelector('.start');
+    btn.hidden = false;
+    btn.onclick = () => { btn.hidden = true; panel.hidden = true; waitOnSchedule(); };
+  }
 })();

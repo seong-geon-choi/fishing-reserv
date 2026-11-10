@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.2.0
+// @version      2.3.0
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -271,8 +271,14 @@
     status(`${CONFIG.date} ${ship.name}: 준비되면 "예약 대기 시작"을 누르세요. 예약 화면으로 이동해 오픈을 기다립니다.`);
     const btn = ui.querySelector('.start');
     btn.hidden = false;
-    btn.onclick = () => { location.href = url; };
+    btn.onclick = () => { arm(`${CONFIG.date.replace(/-/g, '')}|${ship.id}`); location.href = url; };
   }
+
+  // "예약 대기 시작"을 누른 날짜·배의 예약 화면에서만 자동으로 진행 (이 탭 안에서만 유지)
+  // → 사이트의 "예약하기"로 다른 날짜·배 팝업을 열었을 때 자동입력/자동신청이 일어나지 않게
+  const TARGET_KEY = 'frs_target';
+  const arm = (target) => { try { sessionStorage.setItem(TARGET_KEY, target); } catch (e) { /* 저장 불가 시 매번 버튼 필요 */ } };
+  const armedFor = (target) => { try { return sessionStorage.getItem(TARGET_KEY) === target; } catch (e) { return false; } };
 
   // ===================== 예약 자동입력 =====================
   const q = new URLSearchParams(location.search);
@@ -372,8 +378,19 @@
     return;
   }
 
+  function runStep1() {
+    if (!fishRadios().length) waitForOpen();
+    else if (!q.get('PS_N_UID')) selectFish();
+    else fillForm();
+  }
+
   if (isList) startOnList();
-  else if (!fishRadios().length) waitForOpen();
-  else if (!q.get('PS_N_UID')) selectFish();
-  else fillForm();
+  else if (armedFor(`${date}|${pa}`)) runStep1();
+  else {
+    const d = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
+    status(`${d} 예약 화면입니다. 이 날짜로 자동입력을 하려면 "예약 대기 시작"을 누르세요.`);
+    const btn = ui.querySelector('.start');
+    btn.hidden = false;
+    btn.onclick = () => { btn.hidden = true; panel.hidden = true; arm(`${date}|${pa}`); runStep1(); };
+  }
 })();

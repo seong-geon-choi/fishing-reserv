@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.4.0.1110-232259
+// @version      2.4.0.1110-232410
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -106,8 +106,10 @@
       .err:empty { display:none; }
       .btns { display:flex; gap:8px; justify-content:flex-end; }
       .ver { font-size:12px; font-weight:400; color:#52606d; }
+      .ask { display:inline-flex; gap:6px; }
+      .ask[hidden] { display:none; }
     </style>
-    <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><button class="start primary" type="button" hidden>예약 대기 시작</button><button class="stop" type="button" hidden>중지</button><button class="gear" type="button">설정</button></div>
+    <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><button class="start primary" type="button" hidden>예약 대기 시작</button><span class="ask" hidden><button class="wait1" type="button">1분 더 기다리기</button><button class="cut" type="button">끊고 새로 요청</button></span><button class="stop" type="button" hidden>중지</button><button class="gear" type="button">설정</button></div>
     <form class="panel" hidden></form>`;
   document.documentElement.appendChild(host);
   const $msg = ui.querySelector('.msg');
@@ -241,20 +243,30 @@
   // ---------- 겹쳐 보내기: 응답이 늦어도 끊지 않고 기다리되, 5초 넘게 응답이 없으면 하나 더 보냄 (최대 3개) ----------
   // probe(signal) → 열렸으면 결과, 아니면 null
   async function pollOverlap(probe, dead, label) {
-    const MAX_INFLIGHT = 3, STAGGER_MS = 5000, GIVE_UP_MS = 60000;
-    let found = null, inflight = 0, sent = 0, lastSent = 0;
+    const MAX_INFLIGHT = 3, STAGGER_MS = 5000, ASK_AFTER_MS = 60000;
+    let found = null, sent = 0, lastSent = 0;
+    const reqs = new Set(); // 응답을 기다리는 요청: { ctl, deadline }
     const fire = () => {
-      inflight++; sent++; lastSent = Date.now();
-      const ctl = new AbortController();
-      const kill = setTimeout(() => ctl.abort(), GIVE_UP_MS); // 60초 넘게 응답 없는 요청만 정리
-      probe(ctl.signal).then((r) => { if (r && !found) found = r; }).catch(() => {}).finally(() => { clearTimeout(kill); inflight--; });
+      sent++; lastSent = Date.now();
+      const req = { ctl: new AbortController(), deadline: Date.now() + ASK_AFTER_MS };
+      reqs.add(req);
+      probe(req.ctl.signal).then((r) => { if (r && !found) found = r; }).catch(() => {}).finally(() => reqs.delete(req));
     };
+    // 1분 넘게 응답이 없는 요청은 자동으로 끊지 않고 사용자에게 물음 (고르지 않으면 계속 기다림)
+    const ask = ui.querySelector(".ask");
+    const overdue = () => [...reqs].filter((r) => Date.now() >= r.deadline);
+    ask.querySelector(".wait1").onclick = () => { for (const r of overdue()) r.deadline = Date.now() + ASK_AFTER_MS; ask.hidden = true; };
+    ask.querySelector(".cut").onclick = () => { for (const r of overdue()) r.ctl.abort(); ask.hidden = true; };
     while (!found && !dead()) {
       const since = Date.now() - lastSent;
-      if ((inflight === 0 && since >= CONFIG.pollMs) || (inflight > 0 && inflight < MAX_INFLIGHT && since >= STAGGER_MS)) fire();
-      status(`${label} 오픈 대기 중… (${sent}회 확인)${inflight > 1 ? ` · 사이트 응답 지연, 응답 대기 ${inflight}개` : ''}`);
+      if ((reqs.size === 0 && since >= CONFIG.pollMs) || (reqs.size > 0 && reqs.size < MAX_INFLIGHT && since >= STAGGER_MS)) fire();
+      const late = overdue().length;
+      ask.hidden = !late;
+      status(`${label} 오픈 대기 중… (${sent}회 확인)${reqs.size > 1 ? ` · 사이트 응답 지연, 응답 대기 ${reqs.size}개` : ""}${late ? ` · ${late}개 요청이 1분 넘게 응답이 없습니다. 더 기다릴까요?` : ""}`);
       await sleep(100);
     }
+    ask.hidden = true;
+    if (dead()) for (const r of reqs) r.ctl.abort(); // 중지하면 남은 요청 정리
     return dead() ? null : found;
   }
 

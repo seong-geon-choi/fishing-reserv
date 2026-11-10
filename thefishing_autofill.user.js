@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.3.0
+// @version      2.4.0
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -27,6 +27,7 @@
     name: '', depositor: '', tel: ['', '', ''],
     people: 2, fishKeywords: [], seatGroups: [], fallbackAnySeat: true,
     openAt: '', startBeforeSec: 30, pollMs: 700, autoSubmit: false,
+    perShip: {}, // 배 번호(PA_N_UID)별 설정: { '3570': { fishKeywords, seatGroups, fallbackAnySeat } }
   };
   const FIELDS = [
     { key: 'date', label: '출조일 (예약할 날짜)', type: 'date', help: '예약 목록 페이지에서 "예약 대기 시작"을 누를 때 사용합니다' },
@@ -35,9 +36,9 @@
     { key: 'depositor', label: '입금자명', type: 'text', help: '예약자와 다를 때만 입력' },
     { key: 'tel', label: '휴대폰 번호', type: 'phone', required: true, help: '예: 010-1234-5678' },
     { key: 'people', label: '예약 인원', type: 'number', min: 1, max: 30 },
-    { key: 'fishKeywords', label: '낚시종류 키워드', type: 'list', help: '쉼표로 구분 (예: 갑오징어, 쭈꾸미). 하나라도 들어간 종류 중 맨 위 것을 고릅니다. 비우면 첫 번째 종류' },
-    { key: 'seatGroups', label: '좌석 그룹', type: 'groups', help: '한 줄에 그룹 하나 (예: 7, 8, 9). 위쪽 줄이 우선입니다. 좌석 지정이 없는 배에서는 무시됩니다' },
-    { key: 'fallbackAnySeat', label: '그룹으로 인원을 못 채우면 남은 좌석으로 채우기', type: 'check' },
+    { key: 'fishKeywords', perShip: true, label: '낚시종류 키워드', type: 'list', help: '쉼표로 구분 (예: 갑오징어, 쭈꾸미). 하나라도 들어간 종류 중 맨 위 것을 고릅니다. 비우면 첫 번째 종류' },
+    { key: 'seatGroups', perShip: true, label: '좌석 그룹', type: 'groups', help: '한 줄에 그룹 하나 (예: 7, 8, 9). 위쪽 줄이 우선입니다. 좌석 지정이 없는 배에서는 무시됩니다' },
+    { key: 'fallbackAnySeat', perShip: true, label: '그룹으로 인원을 못 채우면 남은 좌석으로 채우기', type: 'check' },
     { key: 'openAt', label: '예약 오픈 시각', type: 'datetime', help: '비우면 페이지를 열자마자 확인을 시작합니다' },
     { key: 'startBeforeSec', label: '오픈 몇 초 전부터 확인할지', type: 'number', min: 5, max: 600 },
     { key: 'pollMs', label: '확인 간격 (밀리초)', type: 'number', min: 300, max: 10000, help: '700~1000 권장. 너무 짧으면 사이트에서 차단될 수 있습니다' },
@@ -51,6 +52,17 @@
   const loadConfig = () => { try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORE_KEY) || '{}') }; } catch (e) { return { ...DEFAULTS }; } };
   const saveConfig = (c) => localStorage.setItem(STORE_KEY, JSON.stringify(c));
   const fmtTime = (s) => (s || '').replace('T', ' ');
+  // 배별 설정을 덮어쓴 값. 배별 설정이 아직 없는 배는 예전(공통) 값을 그대로 씀
+  const forShip = (c, shipId) => ({ ...c, ...((c.perShip || {})[shipId] || {}) });
+  // 지금 화면의 배: 예약 화면은 주소의 배 번호, 목록 페이지는 설정의 배 이름으로 찾은 배
+  function currentShip() {
+    if (isStep1) {
+      const id = new URLSearchParams(location.search).get('PA_N_UID');
+      return id ? { id, name: document.title.split('>')[0].trim() || `배 ${id}` } : null;
+    }
+    const names = [].concat(loadConfig().shipName || []).filter(Boolean);
+    return (names.length && shipLinks().find((s) => names.some((n) => s.name.includes(n)))) || null;
+  }
 
   // ---------- 상태 표시줄 + 설정 패널 (사이트 CSS와 섞이지 않게 Shadow DOM 사용) ----------
   const nums = (s) => (String(s).match(/\d+/g) || []).map(Number);
@@ -116,6 +128,8 @@
       .err:empty { display:none; }
       .btns { display:flex; gap:8px; justify-content:flex-end; }
       .ver { font-size:12px; font-weight:400; color:#52606d; }
+      h3.shiphead { margin:18px 0 2px; padding-top:12px; border-top:1px solid #d5dce2; font-size:15px; color:#1c6fb8; }
+      .shipnote { margin:0 0 10px; }
       .pickrow { margin:-6px 0 12px; }
       .pick { display:flex; flex-wrap:wrap; gap:6px; }
       .pick[hidden] { display:none; }
@@ -128,14 +142,25 @@
   const status = (m) => { $msg.textContent = m; console.log('[자동입력]', m); };
 
   function openPanel(note) {
-    const c = loadConfig();
+    const ship = currentShip();
+    panel.dataset.shipId = ship ? ship.id : '';
+    const all = loadConfig();
+    const c = ship ? forShip(all, ship.id) : all;
     const ver = typeof GM_info !== 'undefined' ? GM_info.script.version : '';
     panel.innerHTML = `<h2>예약 자동입력 설정 <span class="ver">${ver ? '버전 ' + ver : ''}</span></h2>
       <p class="sub">이 사이트(${location.hostname})에 저장됩니다. 다른 업체 사이트에서는 따로 입력하세요.</p>
       <p class="err">${note || ''}</p>`;
+    let shipHeadDone = false;
     for (const f of FIELDS) {
       const id = 'f_' + f.key;
       const help = f.help ? `<span class="help">${f.help}</span>` : '';
+      if (f.perShip && !shipHeadDone) {
+        shipHeadDone = true;
+        panel.insertAdjacentHTML('beforeend', ship
+          ? `<h3 class="shiphead">${ship.name} 전용 설정</h3><p class="help shipnote">아래 항목은 이 배에만 적용됩니다. 같은 사이트의 다른 배는 따로 정합니다.</p>`
+          : `<h3 class="shiphead">배별 설정 (낚시종류·좌석)</h3><p class="help shipnote">배 이름을 입력하고 저장하면, 그 배의 낚시종류·좌석 설정이 여기에 나타납니다.</p>`);
+      }
+      if (f.perShip && !ship) continue;
       if (f.type === 'check') {
         panel.insertAdjacentHTML('beforeend', `<label class="c ${f.danger ? 'danger' : ''}"><input type="checkbox" id="${id}" ${c[f.key] ? 'checked' : ''}><span>${f.label}${f.danger ? `<span class="help danger">${f.danger}</span>` : help}</span></label>`);
         continue;
@@ -159,7 +184,13 @@
     e.preventDefault();
     try {
       const c = loadConfig();
-      for (const f of FIELDS) c[f.key] = readField(f, ui.getElementById('f_' + f.key));
+      const shipId = panel.dataset.shipId;
+      for (const f of FIELDS) {
+        if (!f.perShip) { c[f.key] = readField(f, ui.getElementById('f_' + f.key)); continue; }
+        if (!shipId) continue; // 배를 모르는 화면에서는 배별 설정 칸이 없음
+        c.perShip = c.perShip || {};
+        (c.perShip[shipId] = c.perShip[shipId] || {})[f.key] = readField(f, ui.getElementById('f_' + f.key));
+      }
       saveConfig(c);
       location.reload();
     } catch (err) {
@@ -239,7 +270,8 @@
   ui.querySelector('.pcancel').onclick = () => endPick(false);
   ui.querySelector('.pdone').onclick = () => endPick(true);
 
-  const CONFIG = loadConfig();
+  // 예약 화면에서는 이 배의 배별 설정(낚시종류·좌석)을 적용
+  const CONFIG = isStep1 ? forShip(loadConfig(), new URLSearchParams(location.search).get('PA_N_UID')) : loadConfig();
   ui.querySelector('.auto').hidden = !CONFIG.autoSubmit;
 
   // ===================== 예약 목록 페이지: 날짜·배 이름으로 예약 화면 찾기 =====================

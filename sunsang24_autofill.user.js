@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.1.0
+// @version      2.2.0
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -204,11 +204,8 @@
   }
 
   // 2) 예약 화면: 인원 → 예약자 → 약관 동의 → (autoSubmit) 예약하기
-  async function fillReservation() {
-    const scheduleNo = location.pathname.split('/').pop();
-    let fromScript = false;
-    try { fromScript = sessionStorage.getItem(FLAG) === scheduleNo; sessionStorage.removeItem(FLAG); } catch (e) { /* 무시 */ }
-
+  // fromScript: 일정 페이지에서 "예약 대기 시작"으로 들어온 경우만 true (자동 신청은 이때만)
+  async function fillReservation(fromScript) {
     const btn = document.getElementById('btn_payment');
     if (!btn) {
       status('선상24에 로그인되어 있지 않습니다. 로그인한 뒤 이 화면을 새로고침하세요.');
@@ -273,7 +270,21 @@
     return;
   }
 
-  if (location.pathname.startsWith('/mypage/reservation_ready/')) fillReservation();
+  if (location.pathname.startsWith('/mypage/reservation_ready/')) {
+    const scheduleNo = location.pathname.split('/').pop();
+    let fromScript = false;
+    try { fromScript = sessionStorage.getItem(FLAG) === scheduleNo; sessionStorage.removeItem(FLAG); } catch (e) { /* 무시 */ }
+    if (fromScript) fillReservation(true);
+    else if (!document.getElementById('btn_payment')) status('선상24에 로그인되어 있지 않습니다. 로그인한 뒤 이 화면을 새로고침하세요.');
+    else {
+      // 사이트의 "바로예약"으로 직접 연 화면: 버튼을 눌러야 입력 (설정을 먼저 확인·변경할 수 있게, 자동 신청은 하지 않음)
+      status('이 예약 화면에서 자동입력을 하려면 "자동입력 시작"을 누르세요. 먼저 설정을 확인할 수 있습니다.');
+      const b = ui.querySelector('.start');
+      b.textContent = '자동입력 시작';
+      b.hidden = false;
+      b.onclick = () => { b.hidden = true; panel.hidden = true; fillReservation(false); };
+    }
+  }
   else showStart();
 
   // 일정 페이지는 평소에도 여는 곳이라, 버튼을 눌러야 대기를 시작 (설정을 먼저 확인·변경할 수 있게)

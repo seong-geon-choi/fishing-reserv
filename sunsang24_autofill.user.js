@@ -72,7 +72,7 @@
       default: v = s;
     }
     const empty = Array.isArray(v) ? !v.filter(Boolean).length : !v;
-    if (f.required && empty) throw `${f.label}을(를) 입력하세요.`;
+    if (f.required && empty) throw `${f.label}: 꼭 입력해야 하는 항목입니다.`;
     return v;
   }
   const missingRequired = (c) => FIELDS.filter((f) => f.required && (Array.isArray(c[f.key]) ? !c[f.key].filter(Boolean).length : !c[f.key]));
@@ -267,7 +267,7 @@
   const missing = missingRequired(CONFIG);
   if (missing.length) {
     status('처음 사용하시나요? 설정에서 예약할 날짜를 먼저 입력하세요.');
-    openPanel(`${missing.map((f) => f.label).join(', ')}을(를) 입력해야 시작합니다.`);
+    openPanel(`시작하려면 다음 항목을 입력하세요: ${missing.map((f) => f.label).join(', ')}`);
     return;
   }
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.4.0.1110-232624
+// @version      2.4.0.1110-233044
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -178,6 +178,15 @@
     return null;
   }
 
+  // 하루치 일정 응답에서 "바로예약" 일정번호 찾기 (날짜 칸 없이 배별 줄만 옴)
+  function findInDay(doc) {
+    for (const btn of doc.querySelectorAll('button.btn_user_reservation[data-schedule_no]')) {
+      const ship = btn.closest('td.ship_info')?.textContent || '';
+      if (!shipNames.length || shipNames.some((s) => ship.includes(s))) return btn.dataset.schedule_no;
+    }
+    return null;
+  }
+
   // 1) 일정 페이지: 오픈 시각까지 카운트다운 → 바로예약 버튼이 생길 때까지 확인 → 예약 화면으로 이동
   // 대기 중지: "중지"를 누르면 확인 요청을 멈추고 시작 버튼으로 돌아감
   let stopped = false;
@@ -209,7 +218,11 @@
       }
     }
     const no = await pollOverlap(async (signal) => {
-      const html = await fetch(`/ship/schedule_fleet/${ym}`, { cache: 'no-store', signal }).then((r) => r.text());
+      // 하루치 일정(사이트가 예약 완료 후 쓰는 요청)만 받아 확인: 한 달치 페이지보다 15~20배 작음
+      const r = await fetch(`/ship/schedule_fleet/${CONFIG.date}/0/simple_day1`, { cache: 'no-store', signal });
+      if (r.ok) return findInDay(new DOMParser().parseFromString(`<table>${await r.text()}</table>`, 'text/html'));
+      // 하루치 요청이 안 되면 한 달치 일정 페이지로 확인
+      const html = await fetch(`/ship/schedule_fleet/${ym}`, { cache: 'no-store', signal }).then((x) => x.text());
       return findSchedule(new DOMParser().parseFromString(html, 'text/html'));
     }, dead, label);
     if (!no) return;

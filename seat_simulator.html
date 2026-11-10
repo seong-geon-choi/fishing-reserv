@@ -1,5 +1,9 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>낚시배 좌석 시뮬레이터</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <style>
@@ -43,7 +47,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-body {
+body { margin: 0;
   background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-block: 20px 40px;
@@ -137,11 +141,14 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
 .btn:disabled { opacity: .45; cursor: default; }
 @media (prefers-reduced-motion: reduce) { .seat rect.box { transition: none; } }
 </style>
+</head>
+<body>
 
 <div class="wrap" id="app">
   <header>
+    <p class="sub" style="margin:0 0 6px"><a href="usage.html#seats">← 사용 안내로 돌아가기</a></p>
     <h1>낚시배 좌석 시뮬레이터</h1>
-    <p class="sub">예약 자동입력 스크립트(<span class="mono">thefishing_autofill.user.js</span>)와 같은 규칙으로 어떤 좌석이 선택될지 미리 확인합니다. 좌석을 눌러 이미 예약된 자리로 표시하세요.</p>
+    <p class="sub">더피싱 예약 자동입력과 같은 규칙으로 어떤 좌석이 선택될지 미리 확인합니다. 좌석을 눌러 "이미 예약된 자리"로 표시해 보세요. 원하는 결과가 나오면 아래 <b>좌석 그룹</b>을 복사해 설정 창에 붙여넣으면 됩니다.</p>
   </header>
 
   <div class="tabs" role="tablist" id="shipTabs"></div>
@@ -175,15 +182,15 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
 
   <div class="grid">
     <section class="panel" aria-label="설정">
-      <h2>스크립트 설정</h2>
+      <h2>설정 창과 같은 항목</h2>
       <div class="row">
-        <label class="f"><span><b>예약 인원</b> (people)</span><input type="number" id="people" min="1" max="30" value="4"></label>
-        <label class="check"><input type="checkbox" id="fallback" checked> 부족하면 남은 좌석으로 채움 (fallbackAnySeat)</label>
+        <label class="f"><span><b>예약 인원</b></span><input type="number" id="people" min="1" max="30" value="4"></label>
+        <label class="check"><input type="checkbox" id="fallback" checked> 그룹으로 인원을 못 채우면 남은 좌석으로 채우기</label>
       </div>
-      <label class="f"><span><b>좌석 그룹</b> (seatGroups) · 한 줄에 그룹 하나, 앞줄이 우선</span>
+      <label class="f"><span><b>좌석 그룹</b> · 한 줄에 그룹 하나, 위쪽 줄이 우선</span>
         <textarea id="groups" spellcheck="false"></textarea>
       </label>
-      <p class="note">스크립트의 <span class="mono">[[8,9,7],[1,2,3]]</span> 형식을 그대로 붙여넣어도 됩니다.</p>
+      <p class="note">설정 창의 좌석 그룹 칸에 적은 내용을 그대로 붙여넣어도 됩니다.</p>
       <div id="groupWarn" style="display:flex;flex-direction:column;gap:6px"></div>
     </section>
 
@@ -192,10 +199,11 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
       <div id="result" style="display:flex;flex-direction:column;gap:8px"></div>
       <table class="gtab" id="gtab"></table>
       <div class="bar" style="justify-content:space-between">
-        <h2>스크립트에 붙여넣을 설정</h2>
+        <h2>설정 창 "좌석 그룹" 칸에 붙여넣기</h2>
         <button class="btn primary" id="copyBtn" type="button">복사</button>
       </div>
       <pre class="cfg" id="cfgOut"></pre>
+      <p class="note" id="cfgNote"></p>
       <p class="note">남은 좌석으로 채우는 순서는 사이트 좌석판의 화면 순서(선수 위쪽 → 윗줄 → 선미 → 선수 아래쪽 → 아랫줄)를 따릅니다. 스크립트도 같은 순서로 고릅니다.</p>
     </section>
   </div>
@@ -392,10 +400,8 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
     if (dup.length) warns.push(`배치에 중복된 좌석 번호가 있습니다: ${[...new Set(dup)].join(', ')}`);
     $('groupWarn').innerHTML = warns.map((w) => `<p class="warn">${w}</p>`).join('');
 
-    $('cfgOut').textContent =
-      `people: ${people},\n` +
-      `seatGroups: [${groups.map((g) => '[' + g.join(',') + ']').join(', ')}],\n` +
-      `fallbackAnySeat: ${s.fallback},`;
+    $('cfgOut').textContent = groups.map((g) => g.join(', ')).join('\n') || '(좌석 그룹을 입력하세요)';
+    $('cfgNote').textContent = `함께 맞출 항목: 예약 인원 ${people}명, "남은 좌석으로 채우기" ${s.fallback ? '켜기' : '끄기'}. 좌석 그룹은 배마다 따로 저장되니 ${PRESETS[shipKey].name} 예약 화면의 설정 창에 넣으세요.`;
   }
 
   function syncInputs() {
@@ -542,3 +548,5 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
   render();
 })();
 </script>
+</body>
+</html>

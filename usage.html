@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>낚시배 예약 자동입력 안내</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: 넓은 화면은 왼쪽 단계 목차(고정) + 오른쪽 본문, 좁은 화면은 위쪽 목차 + 본문 한 열 */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --fg: #16212b;
+  --muted: #56636f;
+  --line: #d5dce2;
+  --soft: #eef2f5;
+  --accent: #1c6fb8;
+  --accent-soft: #dceaf7;
+  --orange: #e8590c;
+  --warn: #9a4a06;
+  --warn-soft: #fdf0dc;
+  --danger: #b42318;
+  --danger-soft: #fde8e6;
+  --ok: #1e7a4f;
+  --bar: #1f2933;
+  --bar-fg: #ffe14d;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f161c; --surface: #17212a; --fg: #e6edf3; --muted: #9aa9b7; --line: #2a3742; --soft: #1d2a35;
+    --accent: #5aa6ec; --accent-soft: #1d3346; --orange: #ff8a4c; --warn: #f0a24a; --warn-soft: #3a2a14;
+    --danger: #ff8a7a; --danger-soft: #3d1f1b; --ok: #4fc58c; --bar: #0b1116; --bar-fg: #ffe14d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f161c; --surface: #17212a; --fg: #e6edf3; --muted: #9aa9b7; --line: #2a3742; --soft: #1d2a35;
+  --accent: #5aa6ec; --accent-soft: #1d3346; --orange: #ff8a4c; --warn: #f0a24a; --warn-soft: #3a2a14;
+  --danger: #ff8a7a; --danger-soft: #3d1f1b; --ok: #4fc58c; --bar: #0b1116; --bar-fg: #ffe14d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 16px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.7;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 64px;
+}
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible, summary:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; align-items: start; }
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr); gap: 16px; } }
+
+/* 목차 */
+nav.toc { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+nav.toc .label { font-size: 12px; letter-spacing: .06em; color: var(--muted); margin: 0 0 6px; }
+nav.toc a { display: flex; gap: 10px; align-items: baseline; padding: 6px 10px; border-radius: 8px; color: var(--fg); text-decoration: none; }
+nav.toc a:hover { background: var(--soft); }
+nav.toc a .n { font-family: var(--font-mono); color: var(--muted); font-size: 12px; min-width: 1.4em; }
+@media (max-width: 860px) {
+  nav.toc { position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  nav.toc .label { width: 100%; }
+  nav.toc a { background: var(--surface); border: 1px solid var(--line); padding: 4px 10px; }
+}
+
+main { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+header.top h1 { font-size: clamp(1.6rem, 4vw, 2.1rem); line-height: 1.3; margin: 0 0 8px; text-wrap: balance; letter-spacing: -0.01em; }
+header.top p { margin: 0; color: var(--muted); max-width: 64ch; }
+section.step { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+@media (max-width: 520px) { section.step { padding: 18px 16px; } }
+.step-head { display: flex; gap: 14px; align-items: center; }
+.step-no { flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-family: var(--font-mono); font-weight: 600; }
+:root[data-theme="dark"] .step-no { color: #0f161c; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .step-no { color: #0f161c; } }
+h2 { font-size: 1.3rem; margin: 0; text-wrap: balance; }
+h3 { font-size: 1.05rem; margin: 8px 0 0; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+ol, ul { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 6px; }
+li > ul, li > ol { margin-top: 6px; }
+code, .mono { font-family: var(--font-mono); font-size: .9em; background: var(--soft); padding: 1px 6px; border-radius: 5px; overflow-wrap: anywhere; }
+kbd { font-family: var(--font-body); font-size: .88em; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 6px; background: var(--surface); white-space: nowrap; }
+b.ui { font-weight: 600; background: var(--accent-soft); padding: 0 5px; border-radius: 4px; }
+
+.note, .warn, .danger { border-radius: 10px; padding: 12px 14px; font-size: .95rem; }
+.note { background: var(--accent-soft); }
+.warn { background: var(--warn-soft); color: var(--warn); }
+.danger { background: var(--danger-soft); color: var(--danger); }
+.note b, .warn b, .danger b { font-weight: 700; }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: .93rem; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: var(--soft); font-weight: 600; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font: inherit; font-weight: 600; font-size: .95rem; padding: 10px 16px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg); text-decoration: none; cursor: pointer; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .btn.primary { color: #0f161c; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.primary { color: #0f161c; } }
+.btn.small { padding: 4px 10px; font-size: .85rem; font-weight: 500; }
+
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 640px) { .cards { grid-template-columns: minmax(0, 1fr); } }
+.card { border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: var(--surface); min-width: 0; }
+.card h3 { margin: 0; }
+.card .ships { font-size: .9rem; color: var(--muted); }
+
+/* PC / 안드로이드 탭 */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tab { font: inherit; font-size: .92rem; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+.tab[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+
+/* 상태 표시줄 미리보기 */
+.barprev { background: var(--bar); color: var(--bar-fg); font-weight: 700; font-size: .9rem; border-radius: 8px; padding: 8px 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.barprev .grow { flex: 1; min-width: 12em; }
+.barprev span.b { background: #fff; color: #1f2933; border-radius: 6px; padding: 2px 10px; font-weight: 500; font-size: .85rem; }
+.barprev span.b.blue { background: #1c6fb8; color: #fff; }
+
+/* 체크리스트 */
+.checklist { list-style: none; padding: 0; gap: 4px; }
+.checklist label { display: flex; gap: 12px; align-items: flex-start; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.checklist label:hover { background: var(--soft); }
+.checklist input { width: 20px; height: 20px; margin-top: 4px; flex: none; accent-color: var(--accent); }
+.checklist input:checked + span { color: var(--muted); text-decoration: line-through; }
+.progress { font-size: .9rem; color: var(--muted); }
+
+details { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+details + details { margin-top: -6px; }
+summary { cursor: pointer; padding: 12px 14px; font-weight: 600; }
+details > div { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+.copyline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.copyline code { flex: 1; min-width: 0; }
+footer { color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="toc" aria-label="단계">
+    <p class="label">순서대로 따라 하세요</p>
+    <a href="#intro"><span class="n">·</span>시작 전에</a>
+    <a href="#tm"><span class="n">1</span>Tampermonkey 설치</a>
+    <a href="#script"><span class="n">2</span>예약 스크립트 설치</a>
+    <a href="#seats"><span class="n">3</span>좌석 정하기</a>
+    <a href="#settings"><span class="n">4</span>설정 입력</a>
+    <a href="#practice"><span class="n">5</span>연습하기</a>
+    <a href="#day"><span class="n">6</span>오픈 당일</a>
+    <a href="#messages"><span class="n">·</span>화면 메시지 뜻</a>
+    <a href="#trouble"><span class="n">·</span>문제 해결</a>
+  </nav>
+
+  <main>
+    <header class="top">
+      <h1>낚시배 예약 자동입력 안내</h1>
+      <p>예약이 열리는 순간을 기다렸다가 낚시종류, 좌석, 인원, 예약자 정보, 약관 동의를 자동으로 채워 주는 도구입니다. 이 페이지의 순서대로 하면 혼자서 설치부터 설정까지 마칠 수 있습니다. 처음 한 번은 20분 정도 걸립니다.</p>
+    </header>
+
+    <!-- 시작 전에 -->
+    <section class="step" id="intro">
+      <h2>시작 전에</h2>
+      <p>지원하는 예약 사이트는 두 가지입니다. 내가 예약하려는 배가 어느 쪽인지 먼저 확인하세요.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>예약 사이트</th><th>배 (예)</th><th>좌석 지정</th><th>로그인</th></tr></thead>
+          <tbody>
+            <tr><td><b>더피싱</b></td><td>만석호, 나대세호, 팀루피호, 하이피싱호</td><td>만석호·나대세호는 좌석 지정, 나머지는 없음</td><td>필요 없음</td></tr>
+            <tr><td><b>선상24</b></td><td>오천 빅보스호, 태안 가가호</td><td>없음 (선장이 배정)</td><td><b>필요</b></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">기본 설정에서는 마지막 <b>"예약 신청" 버튼은 내가 직접 누릅니다.</b> 스크립트는 그 버튼 바로 앞까지만 채워 둡니다. 설정에서 신청 버튼까지 자동으로 누르게 할 수도 있습니다.</p>
+      <p><b>준비물:</b> PC의 <b>Chrome</b> 또는 안드로이드 휴대폰의 <b>Firefox</b>. 안드로이드 Chrome은 확장 프로그램을 쓸 수 없어서 Firefox를 씁니다.</p>
+    </section>
+
+    <!-- 1. Tampermonkey -->
+    <section class="step" id="tm">
+      <div class="step-head"><span class="step-no">1</span><h2>Tampermonkey 설치 (처음 한 번)</h2></div>
+      <p>Tampermonkey는 예약 사이트 위에서 우리 스크립트를 실행해 주는 무료 확장 프로그램입니다.</p>
+      <div class="tabs" role="tablist" aria-label="기기 선택">
+        <button class="tab" role="tab" type="button" id="tab-pc" aria-selected="true" aria-controls="pane-pc">PC (Chrome)</button>
+        <button class="tab" role="tab" type="button" id="tab-and" aria-selected="false" aria-controls="pane-and">안드로이드 (Firefox)</button>
+      </div>
+      <div id="pane-pc" role="tabpanel" aria-labelledby="tab-pc">
+        <ol>
+          <li><a href="https://chromewebstore.google.com/search/Tampermonkey" target="_blank" rel="noopener">Chrome 웹 스토어</a>에서 <b>Tampermonkey</b>(제작: Jan Biniok)를 찾아 <b class="ui">Chrome에 추가</b>를 누릅니다.</li>
+          <li>주소창에 <code>chrome://extensions</code>를 입력하고 <kbd>Enter</kbd>를 누릅니다. 이 주소는 링크로 열 수 없어서 직접 입력해야 합니다.</li>
+          <li>오른쪽 위의 <b class="ui">개발자 모드</b>를 켭니다.</li>
+          <li>Tampermonkey 카드의 <b class="ui">세부정보</b>를 누르고, <b class="ui">사용자 스크립트 허용</b>이 있으면 켭니다.</li>
+          <li>툴바의 퍼즐 모양 아이콘을 누르고 Tampermonkey 옆 핀을 눌러 두면, 나중에 찾기 쉽습니다.</li>
+        </ol>
+        <p class="warn" style="margin-top:12px"><b>개발자 모드를 켜지 않으면</b> 설치해도 예약 사이트에서 아무 일도 일어나지 않습니다. 가장 많이 막히는 부분입니다.</p>
+      </div>
+      <div id="pane-and" role="tabpanel" aria-labelledby="tab-and" hidden>
+        <ol>
+          <li>Play 스토어에서 <b>Firefox</b>를 설치합니다.</li>
+          <li>Firefox 메뉴(⋮) → <b class="ui">부가 기능</b> → <b>Tampermonkey</b>를 찾아 <b class="ui">추가</b>를 누릅니다.</li>
+          <li>이 안내 페이지도 <b>Firefox에서 열어</b> 다음 단계를 진행하세요.</li>
+        </ol>
+        <p class="warn" style="margin-top:12px">휴대폰은 화면이 꺼지거나 다른 앱으로 넘어가면 스크립트가 멈출 수 있습니다. 오픈을 기다리는 동안 <b>화면을 켜 두고 Firefox를 앞에 띄워 두세요.</b></p>
+      </div>
+    </section>
+
+    <!-- 2. 스크립트 -->
+    <section class="step" id="script">
+      <div class="step-head"><span class="step-no">2</span><h2>예약 스크립트 설치</h2></div>
+      <p>예약할 사이트의 버튼을 누르세요. Tampermonkey 설치 화면이 새 탭에 열리면 <b class="ui">설치</b>를 누릅니다. 두 개 모두 설치해도 됩니다.</p>
+      <div class="cards">
+        <div class="card">
+          <h3>더피싱용</h3>
+          <p class="ships">만석호, 나대세호, 팀루피호, 하이피싱호 등</p>
+          <a class="btn primary" href="https://raw.githubusercontent.com/seong-geon-choi/fishing-reserv/main/thefishing_autofill.user.js">더피싱용 설치</a>
+        </div>
+        <div class="card">
+          <h3>선상24용</h3>
+          <p class="ships">오천 빅보스호, 태안 가가호 등</p>
+          <a class="btn primary" href="https://raw.githubusercontent.com/seong-geon-choi/fishing-reserv/main/sunsang24_autofill.user.js">선상24용 설치</a>
+        </div>
+      </div>
+      <ul>
+        <li>버튼을 눌렀는데 <b>코드 글자만 보이면</b> Tampermonkey가 설치되지 않았거나 꺼져 있는 것입니다. 1단계를 다시 확인하세요.</li>
+        <li>예전에 코드를 붙여넣어 설치한 스크립트가 있다면 Tampermonkey <b class="ui">대시보드</b>에서 <b>지우세요.</b> 두 개가 같이 켜져 있으면 같은 화면에서 둘 다 실행됩니다.</li>
+        <li>새 버전은 자동으로 받아집니다. 받는 방법은 <a href="#update">업데이트</a>를 보세요.</li>
+      </ul>
+    </section>
+
+    <!-- 3. 좌석 -->
+    <section class="step" id="seats">
+      <div class="step-head"><span class="step-no">3</span><h2>좌석 정하기 (만석호·나대세호처럼 좌석을 지정하는 배만)</h2></div>
+      <p>좌석이 없는 배(팀루피호, 하이피싱호, 선상24의 배)는 이 단계를 건너뛰고 <a href="#settings">4단계</a>로 가세요.</p>
+
+      <h3>좌석이 골라지는 방식</h3>
+      <p>원하는 자리를 <b>그룹</b>으로 적어 둡니다. 한 줄이 그룹 하나이고, 위쪽 줄이 먼저입니다.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>좌석 그룹 (인원 4명)</th><th>이미 예약된 좌석</th><th>골라지는 좌석</th></tr></thead>
+        <tbody>
+          <tr><td rowspan="3"><code>6, 7, 8, 9, 10, 11</code><br><code>1, 2, 3, 4, 5</code></td><td>없음</td><td>6, 7, 8, 9</td></tr>
+          <tr><td>9</td><td>6, 7, 8, 10 (9번만 건너뜀)</td></tr>
+          <tr><td>7, 9, 10</td><td>1, 2, 3, 4 (첫 줄은 빈자리 3개라 둘째 줄)</td></tr>
+        </tbody>
+      </table></div>
+      <ol>
+        <li>위에서부터 <b>빈자리가 인원 이상 남은 첫 줄</b>을 고르고, 그 줄에서 <b>적은 순서대로</b> 고릅니다.</li>
+        <li>그런 줄이 없으면 모든 줄을 이어 붙인 순서대로 빈자리를 고릅니다.</li>
+        <li>그래도 모자라면 "남은 좌석으로 채우기"를 켠 경우 아무 빈자리로 채웁니다.</li>
+      </ol>
+      <p class="note">같이 앉을 자리는 <b>한 줄에 묶어서</b> 적으세요. <code>6</code> / <code>7</code> / <code>8</code>처럼 한 줄에 한 자리씩 적으면, 한 자리짜리 줄은 인원을 못 채워 그룹으로 선택되지 않습니다.</p>
+
+      <h3>방법 A. 좌석 시뮬레이터로 미리 연습 (추천)</h3>
+      <ol>
+        <li><a class="btn small" href="seat_simulator.html">좌석 시뮬레이터 열기</a></li>
+        <li>위쪽에서 배(만석호 또는 나대세호)를 고릅니다.</li>
+        <li><b>예약 인원</b>과 <b>좌석 그룹</b>을 입력합니다.</li>
+        <li>배 그림의 좌석을 눌러 "이미 예약된 자리"로 바꿔 보면서, 주황색으로 표시되는 결과가 원하는 대로인지 확인합니다.</li>
+        <li>마음에 들면 <b class="ui">복사</b>를 누르고, 4단계 설정 창의 <b>좌석 그룹</b> 칸에 붙여넣습니다.</li>
+      </ol>
+
+      <h3>방법 B. 예약 사이트의 배 그림에서 바로 고르기</h3>
+      <ol>
+        <li><b>예약이 열려 있는 아무 날짜</b>의 예약 화면을 엽니다. 예약 목록에서 그 배의 <b class="ui">예약하기</b>를 누르면 됩니다.</li>
+        <li>사이트에서 낚시종류를 골라 <b>배 그림(좌석판)</b>이 보이게 합니다.</li>
+        <li>화면 맨 위 검은 줄의 <b class="ui">설정</b> → 좌석 그룹 아래 <b class="ui">좌석판에서 고르기</b>를 누릅니다.</li>
+        <li>원하는 좌석을 <b>순서대로</b> 누릅니다. 좌석 위에 <code>1-1</code>, <code>1-2</code>처럼 "그룹-순서"가 표시됩니다.
+          <ul>
+            <li>한 그룹을 다 골랐으면 <b class="ui">새 그룹</b>을 누르고 다음 후보를 고릅니다.</li>
+            <li>잘못 누른 좌석은 다시 누르면 빠집니다.</li>
+          </ul>
+        </li>
+        <li><b class="ui">완료</b> → <b class="ui">저장하고 다시 시작</b>을 누릅니다.</li>
+      </ol>
+      <p class="muted">좌석 그룹은 <b>배마다 따로</b> 저장됩니다. 만석호와 나대세호를 각각 정할 수 있습니다.</p>
+    </section>
+
+    <!-- 4. 설정 -->
+    <section class="step" id="settings">
+      <div class="step-head"><span class="step-no">4</span><h2>설정 입력</h2></div>
+      <p>예약 사이트를 열면 화면 맨 위에 검은 줄(상태 표시줄)이 생깁니다. 오른쪽 <b class="ui">설정</b>을 누르면 설정 창이 열립니다. 처음에는 자동으로 열립니다.</p>
+      <div class="barprev" aria-hidden="true"><span class="grow">처음 사용하시나요? 설정에서 예약자 정보를 먼저 입력하세요.</span><span class="b">설정</span></div>
+      <p class="warn"><b>설정은 사이트 주소마다 따로 저장됩니다.</b> 예를 들어 만석호 사이트와 하이피싱 사이트, 빅보스호와 가가호는 각각 입력해야 합니다.</p>
+
+      <h3>4-A. 더피싱 (만석호·나대세호·팀루피호·하이피싱호)</h3>
+      <ol>
+        <li>업체의 <b>예약 목록 페이지</b>를 엽니다.
+          <div class="table-wrap" style="margin-top:8px"><table>
+            <thead><tr><th>배</th><th>예약 목록 페이지</th></tr></thead>
+            <tbody>
+              <tr><td>만석호, 나대세호</td><td><a href="https://mscufishing.thefishing.kr/index.php?mid=bk" target="_blank" rel="noopener">mscufishing.thefishing.kr</a></td></tr>
+              <tr><td>팀루피호</td><td><a href="https://masterfish.thefishing.kr/index.php?mid=bk" target="_blank" rel="noopener">masterfish.thefishing.kr</a></td></tr>
+              <tr><td>하이피싱호</td><td><a href="https://hifishing.thefishing.kr/index.php?mid=bk" target="_blank" rel="noopener">hifishing.thefishing.kr</a></td></tr>
+            </tbody>
+          </table></div>
+        </li>
+        <li><b class="ui">설정</b>을 열고 아래 항목을 채운 뒤 <b class="ui">저장하고 다시 시작</b>을 누릅니다.</li>
+      </ol>
+      <div class="table-wrap"><table>
+        <thead><tr><th>항목</th><th>적는 법</th></tr></thead>
+        <tbody>
+          <tr><td>출조일</td><td>예약할 날짜를 달력에서 고릅니다</td></tr>
+          <tr><td>배 이름</td><td>배 이름 일부. 예: <code>만석호</code>, <code>팀루피</code>. 설정 창에 그 사이트의 배 목록이 안내됩니다</td></tr>
+          <tr><td>예약자명 <b>*</b></td><td>예약자 이름</td></tr>
+          <tr><td>입금자명</td><td>예약자와 다를 때만</td></tr>
+          <tr><td>휴대폰 번호 <b>*</b></td><td><code>010-1234-5678</code></td></tr>
+          <tr><td>예약 인원</td><td>숫자</td></tr>
+          <tr><td>낚시종류 키워드</td><td>쉼표로 구분. 예: <code>갑오징어, 쭈꾸미</code>. 하나라도 들어간 종류 중 맨 위 것을 고릅니다</td></tr>
+          <tr><td>좌석 그룹</td><td><a href="#seats">3단계</a>에서 정한 내용</td></tr>
+          <tr><td>예약 오픈 시각</td><td>예약이 열리는 날짜와 시각. 비우면 시작하자마자 확인합니다</td></tr>
+          <tr><td>자동으로 누르기</td><td><b>처음에는 꺼 두세요.</b> 켜면 "예약 신청하기"까지 눌러 실제로 예약됩니다</td></tr>
+        </tbody>
+      </table></div>
+      <p class="muted">낚시종류 키워드, 좌석 그룹, 남은 좌석 채우기는 <b>배마다 따로</b> 저장됩니다. 설정 창에 "만석호 전용 설정"처럼 표시됩니다. 배 이름을 먼저 저장해야 이 칸들이 나타납니다.</p>
+
+      <h3>4-B. 선상24 (빅보스호·가가호)</h3>
+      <ol>
+        <li>선상24에 <b>로그인</b>합니다. 예약자명과 전화번호는 계정 정보가 자동으로 쓰입니다.</li>
+        <li>출조일이 있는 달의 <b>일정 페이지</b>를 엽니다. 주소 끝 6자리가 <code>연월</code>입니다.
+          <div class="table-wrap" style="margin-top:8px"><table>
+            <thead><tr><th>배</th><th>일정 페이지 (2026년 12월 예)</th></tr></thead>
+            <tbody>
+              <tr><td>빅보스호</td><td><a href="https://bigboss24.sunsang24.com/ship/schedule_fleet/202612" target="_blank" rel="noopener">bigboss24.sunsang24.com/ship/schedule_fleet/202612</a></td></tr>
+              <tr><td>가가호</td><td><a href="https://gagaho.sunsang24.com/ship/schedule_fleet/202612" target="_blank" rel="noopener">gagaho.sunsang24.com/ship/schedule_fleet/202612</a></td></tr>
+            </tbody>
+          </table></div>
+        </li>
+        <li><b class="ui">설정</b>에서 <b>출조일</b>, <b>배 이름</b>, <b>예약 인원</b>, <b>예약 오픈 시각</b>을 입력하고 저장합니다.
+          <ul><li>가가호 사이트에는 날짜마다 배가 여러 척 나옵니다. <b>배 이름을 꼭</b> 적으세요(예: <code>가가호</code>).</li></ul>
+        </li>
+      </ol>
+    </section>
+
+    <!-- 5. 연습 -->
+    <section class="step" id="practice">
+      <div class="step-head"><span class="step-no">5</span><h2>연습하기 (꼭 한 번)</h2></div>
+      <p class="danger"><b>연습할 때는 "자동으로 누르기"가 꺼져 있는지</b> 먼저 확인하세요. 켜져 있으면 상태 표시줄에 빨간 <b>자동 신청 켜짐</b> 표시가 보입니다.</p>
+      <ol>
+        <li>설정의 출조일을 <b>지금 예약이 열려 있는 날짜</b>로 잠시 바꿔 저장합니다.</li>
+        <li>4단계의 예약 목록(더피싱) 또는 일정 페이지(선상24)에서 <b class="ui">예약 대기 시작</b>을 누릅니다.</li>
+        <li>예약 화면으로 넘어가 낚시종류, 좌석, 인원, 정보, 동의가 채워지고 상태 표시줄에 <b>입력 완료</b>가 나오면 성공입니다.</li>
+        <li>연습이니 <b>신청 버튼은 누르지 말고</b> 창을 닫습니다. 출조일을 원래 날짜로 되돌려 두세요.</li>
+      </ol>
+    </section>
+
+    <!-- 6. 오픈 당일 -->
+    <section class="step" id="day">
+      <div class="step-head"><span class="step-no">6</span><h2>오픈 당일 체크리스트</h2></div>
+      <p>하나씩 확인하며 체크하세요. 체크 표시는 이 기기에만 저장됩니다.</p>
+      <ul class="checklist" id="checklist">
+        <li><label><input type="checkbox" id="c1"><span><b>전날:</b> Tampermonkey 아이콘 → <b class="ui">사용자 스크립트 업데이트 확인</b>을 눌러 최신 버전을 받았다</span></label></li>
+        <li><label><input type="checkbox" id="c2"><span><b>전날:</b> 설정의 출조일, 배 이름, 인원, 좌석 그룹, 예약 오픈 시각이 맞다</span></label></li>
+        <li><label><input type="checkbox" id="c3"><span>PC 시계를 맞췄다 (Windows 설정 → 시간 및 언어 → 날짜 및 시간 → <b class="ui">지금 동기화</b>). 휴대폰은 "자동 날짜 및 시간"이 켜져 있다</span></label></li>
+        <li><label><input type="checkbox" id="c4"><span>절전 모드를 껐다. 휴대폰은 화면이 꺼지지 않게 하고 충전기를 꽂았다</span></label></li>
+        <li><label><input type="checkbox" id="c5"><span>(선상24) 로그인되어 있다</span></label></li>
+        <li><label><input type="checkbox" id="c6"><span>"자동으로 누르기"를 쓸지 정했다. 직접 누를 거면 꺼져 있고, 자동이면 켜져 있다</span></label></li>
+        <li><label><input type="checkbox" id="c7"><span>오픈 몇 분 전에 예약 목록/일정 페이지를 열고 <b class="ui">예약 대기 시작</b>을 눌렀다</span></label></li>
+        <li><label><input type="checkbox" id="c8"><span>상태 표시줄에 카운트다운 또는 "오픈 대기 중"이 보인다. 탭을 닫거나 창을 최소화하지 않는다</span></label></li>
+        <li><label><input type="checkbox" id="c9"><span>"입력 완료"가 나오면 좌석·인원·금액을 확인하고 빨간 테두리 버튼을 눌렀다</span></label></li>
+        <li><label><input type="checkbox" id="c10"><span>예약현황에서 내 예약과 입금 안내를 확인했다</span></label></li>
+      </ul>
+      <div class="copyline"><span class="progress" id="progress"></span><button class="btn small" type="button" id="resetCheck">체크 모두 지우기</button></div>
+    </section>
+
+    <!-- 메시지 -->
+    <section class="step" id="messages">
+      <h2>화면 맨 위 메시지 뜻</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>메시지 (예)</th><th>뜻 / 할 일</th></tr></thead>
+        <tbody>
+          <tr><td>…준비되면 "예약 대기 시작"을 누르세요</td><td>설정을 확인하고, 준비되면 버튼을 누르세요. 누르기 전에는 아무 일도 일어나지 않습니다</td></tr>
+          <tr><td>…확인 시작까지 00:12:34 (요청 없음)</td><td>오픈 시각 전 카운트다운입니다. 그대로 두세요</td></tr>
+          <tr><td>…오픈 대기 중… (15회 확인)</td><td>오픈을 확인하는 중입니다. 그대로 두세요</td></tr>
+          <tr><td>오픈 감지! / 예약 화면으로 이동합니다</td><td>예약이 열렸습니다. 자동으로 진행됩니다</td></tr>
+          <tr><td>입력 완료: …빨간 테두리 버튼을 누르세요</td><td>내용을 확인하고 신청 버튼을 직접 누르세요</td></tr>
+          <tr><td>…예약 화면입니다. 이 날짜로 자동입력을 하려면…</td><td>"예약 대기 시작"을 누르지 않고 들어온 예약 화면입니다. 이 날짜로 진행하려면 버튼을 누르세요</td></tr>
+          <tr><td>설정한 배 이름(…)을 이 사이트에서 찾지 못했습니다</td><td>설정의 배 이름을 메시지에 나온 배 목록대로 고치세요</td></tr>
+          <tr><td>출조일이 이미 지났습니다</td><td>설정에서 날짜를 바꾸세요</td></tr>
+          <tr><td>선상24에 로그인되어 있지 않습니다</td><td>로그인한 뒤 그 화면을 새로고침하세요</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <!-- 문제 해결 -->
+    <section class="step" id="trouble">
+      <h2>문제 해결</h2>
+      <details><summary>예약 사이트에 검은 줄(상태 표시줄)이 안 보여요</summary><div>
+        <p>1단계의 <b>개발자 모드</b>와 <b>사용자 스크립트 허용</b>이 켜져 있는지 확인하세요. Tampermonkey 대시보드에서 스크립트가 "사용" 상태인지도 확인하세요. 그다음 예약 페이지를 새로고침합니다.</p>
+      </div></details>
+      <details><summary>검은 줄이 두 개 보여요</summary><div>
+        <p>예전 스크립트가 남아 있습니다. Tampermonkey 대시보드에서 예전 것을 지우세요.</p>
+      </div></details>
+      <details><summary>설정 창이 "저장"되지 않고 빨간 글씨가 나와요</summary><div>
+        <p>빨간 글씨가 알려주는 칸을 고치세요. 예: 휴대폰 번호는 <code>010-1234-5678</code> 형식, 인원은 1~30.</p>
+      </div></details>
+      <details><summary>"대기자로 예약하시겠습니까?" 창이 떠서 멈췄어요 (더피싱)</summary><div>
+        <p>남은 자리보다 인원이 많을 때 사이트가 띄우는 창입니다. 직접 선택하세요. 인원을 줄이거나 좌석 그룹을 넉넉히 적어 두면 줄일 수 있습니다.</p>
+      </div></details>
+      <details><summary>원하는 좌석이 아닌 자리가 골라졌어요</summary><div>
+        <p>그룹의 좌석이 이미 예약돼 다음 그룹이나 남은 좌석으로 채운 것입니다. <a href="seat_simulator.html">좌석 시뮬레이터</a>로 그 상황을 재현해 보고 그룹을 고치세요. 남은 좌석으로 채우기를 끄면 그룹 밖 좌석은 고르지 않습니다. 다만 이 경우 인원이 줄어들 수 있습니다.</p>
+      </div></details>
+      <details><summary>하이피싱호의 부가상품(생새우, 낚시대 임대)은요?</summary><div>
+        <p>선택 항목이라 스크립트가 고르지 않습니다. 필요하면 신청 전에 직접 고르세요.</p>
+      </div></details>
+      <details id="update"><summary>새 버전으로 업데이트하려면</summary><div>
+        <p>보통은 하루에 한 번 자동으로 받습니다. 바로 받으려면 Tampermonkey 아이콘 → <b class="ui">사용자 스크립트 업데이트 확인</b>을 누르세요. 설정 창 제목 옆에 지금 버전이 보입니다. 업데이트해도 설정은 그대로입니다.</p>
+      </div></details>
+    </section>
+
+    <footer>
+      <p>관리자: 스크립트를 고친 뒤에는 파일 맨 위 <code>@version</code>을 반드시 올리고 GitHub <code>main</code>에 올리세요. 개인정보는 코드에 넣지 않습니다. 저장소: <a href="https://github.com/seong-geon-choi/fishing-reserv" target="_blank" rel="noopener">seong-geon-choi/fishing-reserv</a></p>
+    </footer>
+  </main>
+</div>
+
+<script>
+(() => {
+  // PC / 안드로이드 탭 (마지막 선택 기억)
+  const tabs = [['tab-pc', 'pane-pc'], ['tab-and', 'pane-and']];
+  const pick = (id) => {
+    for (const [t, p] of tabs) {
+      const on = t === id;
+      document.getElementById(t).setAttribute('aria-selected', on);
+      document.getElementById(p).hidden = !on;
+    }
+    try { localStorage.setItem('usage.tab', id); } catch (e) { /* 저장 불가 */ }
+  };
+  for (const [t] of tabs) document.getElementById(t).addEventListener('click', () => pick(t));
+  let saved = null;
+  try { saved = localStorage.getItem('usage.tab'); } catch (e) { /* 저장 불가 */ }
+  if (!saved && /Android/i.test(navigator.userAgent)) saved = 'tab-and';
+  if (saved && document.getElementById(saved)) pick(saved);
+
+  // 오픈 당일 체크리스트 (이 기기에만 저장)
+  const boxes = [...document.querySelectorAll('#checklist input')];
+  const KEY = 'usage.checklist';
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { return {}; } };
+  const save = (s) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* 저장 불가 */ } };
+  const state = load();
+  const progress = () => { document.getElementById('progress').textContent = `${boxes.filter((b) => b.checked).length} / ${boxes.length} 완료`; };
+  boxes.forEach((b) => {
+    b.checked = !!state[b.id];
+    b.addEventListener('change', () => { state[b.id] = b.checked; save(state); progress(); });
+  });
+  document.getElementById('resetCheck').addEventListener('click', () => {
+    boxes.forEach((b) => { b.checked = false; state[b.id] = false; });
+    save(state); progress();
+  });
+  progress();
+
+  // 주소의 #update 로 들어오면 해당 항목 펼치기
+  const openHash = () => { const d = document.getElementById(location.hash.slice(1)); if (d && d.tagName === 'DETAILS') d.open = true; };
+  window.addEventListener('hashchange', openHash);
+  openHash();
+})();
+</script>
+</body>
+</html>

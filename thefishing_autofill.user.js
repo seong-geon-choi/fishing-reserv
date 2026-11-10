@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.1.0
+// @version      2.2.0
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/index.php*
 // @match        https://*.thefishing.kr/_core/module/reservation_boat_v5.2_seat1/popup.step1.php*
@@ -115,8 +115,12 @@
       .err { background:#fde8e8; color:#c92a2a; border-radius:6px; padding:8px; margin:0 0 12px; }
       .err:empty { display:none; }
       .btns { display:flex; gap:8px; justify-content:flex-end; }
+      .ver { font-size:12px; font-weight:400; color:#52606d; }
+      .pickrow { margin:-6px 0 12px; }
+      .pick { display:flex; flex-wrap:wrap; gap:6px; }
+      .pick[hidden] { display:none; }
     </style>
-    <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><button class="start primary" type="button" hidden>예약 대기 시작</button><button class="gear" type="button">설정</button></div>
+    <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><span class="pick" hidden><button class="pnew" type="button">새 그룹</button><button class="pundo" type="button">하나 지우기</button><button class="pcancel" type="button">취소</button><button class="pdone primary" type="button">완료</button></span><button class="start primary" type="button" hidden>예약 대기 시작</button><button class="gear" type="button">설정</button></div>
     <form class="panel" hidden></form>`;
   document.documentElement.appendChild(host);
   const $msg = ui.querySelector('.msg');
@@ -125,7 +129,8 @@
 
   function openPanel(note) {
     const c = loadConfig();
-    panel.innerHTML = `<h2>예약 자동입력 설정</h2>
+    const ver = typeof GM_info !== 'undefined' ? GM_info.script.version : '';
+    panel.innerHTML = `<h2>예약 자동입력 설정 <span class="ver">${ver ? '버전 ' + ver : ''}</span></h2>
       <p class="sub">이 사이트(${location.hostname})에 저장됩니다. 다른 업체 사이트에서는 따로 입력하세요.</p>
       <p class="err">${note || ''}</p>`;
     for (const f of FIELDS) {
@@ -139,6 +144,12 @@
         : `<input id="${id}" type="${{ number: 'number', datetime: 'datetime-local', date: 'date' }[f.type] || 'text'}" ${f.type === 'datetime' ? 'step="1"' : ''} ${f.type === 'phone' ? 'inputmode="tel"' : ''}>`;
       panel.insertAdjacentHTML('beforeend', `<label class="f"><span>${f.label}${f.required ? ' <b>*</b>' : ''}</span>${input}${help}</label>`);
       ui.getElementById(id).value = toText(f, c[f.key]);
+      if (f.key === 'seatGroups') {
+        panel.insertAdjacentHTML('beforeend', seatSpans().length
+          ? `<div class="pickrow"><button type="button" class="pickseat">좌석판에서 고르기</button><span class="help">배 그림에서 원하는 좌석을 순서대로 눌러 그룹을 만듭니다.</span></div>`
+          : `<div class="pickrow"><span class="help">좌석판에서 고르려면, 예약이 열려 있는 날짜의 예약 화면(낚시종류 선택 후)에서 설정을 여세요.</span></div>`);
+        panel.querySelector('.pickseat')?.addEventListener('click', startPick);
+      }
     }
     panel.insertAdjacentHTML('beforeend', `<div class="btns"><button type="button" class="close">닫기</button><button type="submit" class="primary">저장하고 다시 시작</button></div>`);
     panel.querySelector('.close').onclick = () => { panel.hidden = true; };
@@ -157,6 +168,76 @@
     }
   });
   ui.querySelector('.gear').onclick = () => (panel.hidden ? openPanel() : (panel.hidden = true));
+
+  // ---------- 좌석판에서 고르기: 사이트 좌석판의 좌석을 누른 순서대로 좌석 그룹을 만듦 ----------
+  // 좌석 번호는 칸의 첫 글자 노드에서 읽음 (고르는 중에 붙이는 순서 배지 글자와 섞이지 않게)
+  const seatNo = (s) => ((s.firstChild && s.firstChild.nodeType === 3 ? s.firstChild.nodeValue : s.textContent) || '').trim();
+  const seatSpans = () => [...document.querySelectorAll('.res_ship_seat span')].filter((s) => /^\d+$/.test(seatNo(s)));
+  let pick = null; // { groups: [[...]], before: '설정 창 textarea 값' }
+  const pickStyle = document.createElement('style');
+  pickStyle.textContent = `
+    .frs-seat { outline: 3px dashed #1c6fb8 !important; cursor: pointer !important; position: relative; }
+    .frs-on { outline: 3px solid #e8590c !important; }
+    .frs-badge { position: absolute; top: -9px; right: -9px; z-index: 10; min-width: 22px; height: 18px; padding: 0 3px; border-radius: 9px;
+      background: #e8590c; color: #fff; font: bold 11px/18px sans-serif; text-align: center; pointer-events: none; }`;
+  function renderPick() {
+    pick.groups = pick.groups.filter((g, i) => g.length || i === pick.groups.length - 1); // 중간의 빈 그룹 정리
+    document.querySelectorAll('.frs-badge').forEach((b) => b.remove());
+    for (const s of seatSpans()) {
+      const n = Number(seatNo(s));
+      const gi = pick.groups.findIndex((g) => g.includes(n));
+      s.classList.toggle('frs-on', gi >= 0);
+      if (gi >= 0) s.insertAdjacentHTML('beforeend', `<b class="frs-badge">${gi + 1}-${pick.groups[gi].indexOf(n) + 1}</b>`);
+    }
+    const text = pick.groups.map((g, i) => g.length ? `그룹${i + 1}: ${g.join(', ')}` : '').filter(Boolean).join(' / ');
+    status(`원하는 순서대로 좌석을 누르세요. 다시 누르면 빠집니다. ${text || '(아직 고른 좌석 없음)'}`);
+  }
+  function onPickClick(e) {
+    const s = e.target.closest('.res_ship_seat span');
+    if (!s || !/^\d+$/.test(seatNo(s))) return;
+    e.preventDefault(); e.stopImmediatePropagation(); // 사이트의 좌석 선택(ticket_seat_click)은 실행하지 않음
+    const n = Number(seatNo(s));
+    const gi = pick.groups.findIndex((g) => g.includes(n));
+    if (gi >= 0) pick.groups[gi].splice(pick.groups[gi].indexOf(n), 1);
+    else pick.groups[pick.groups.length - 1].push(n);
+    renderPick();
+  }
+  function startPick() {
+    const ta = ui.getElementById('f_seatGroups');
+    const groups = ta.value.split('\n').map(nums).filter((g) => g.length);
+    pick = { groups: groups.length ? groups : [[]], before: ta.value };
+    if (pick.groups[pick.groups.length - 1].length) pick.groups.push([]); // 이어서 고르는 좌석은 새 그룹으로
+    panel.hidden = true;
+    ui.querySelector('.gear').hidden = true;
+    ui.querySelector('.pick').hidden = false;
+    document.head.appendChild(pickStyle);
+    seatSpans().forEach((s) => s.classList.add('frs-seat'));
+    document.addEventListener('click', onPickClick, true);
+    document.querySelector('.res_ship_seat').scrollIntoView({ block: 'center' });
+    renderPick();
+  }
+  function endPick(apply) {
+    document.removeEventListener('click', onPickClick, true);
+    document.querySelectorAll('.frs-badge').forEach((b) => b.remove());
+    seatSpans().forEach((s) => s.classList.remove('frs-seat', 'frs-on'));
+    pickStyle.remove();
+    ui.querySelector('.pick').hidden = true;
+    ui.querySelector('.gear').hidden = false;
+    ui.getElementById('f_seatGroups').value = apply
+      ? pick.groups.filter((g) => g.length).map((g) => g.join(', ')).join('\n')
+      : pick.before;
+    pick = null;
+    status(apply ? '좌석 그룹을 설정 창에 넣었습니다. "저장하고 다시 시작"을 눌러야 저장됩니다.' : '좌석 고르기를 취소했습니다.');
+    panel.hidden = false;
+  }
+  ui.querySelector('.pnew').onclick = () => { if (pick.groups[pick.groups.length - 1].length) pick.groups.push([]); renderPick(); };
+  ui.querySelector('.pundo').onclick = () => {
+    const g = [...pick.groups].reverse().find((x) => x.length);
+    if (g) g.pop();
+    renderPick();
+  };
+  ui.querySelector('.pcancel').onclick = () => endPick(false);
+  ui.querySelector('.pdone').onclick = () => endPick(true);
 
   const CONFIG = loadConfig();
   ui.querySelector('.auto').hidden = !CONFIG.autoSubmit;

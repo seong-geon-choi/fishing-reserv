@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.0.0
+// @version      2.0.1
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -105,6 +105,7 @@
       .err { background:#fde8e8; color:#c92a2a; border-radius:6px; padding:8px; margin:0 0 12px; }
       .err:empty { display:none; }
       .btns { display:flex; gap:8px; justify-content:flex-end; }
+      .ver { font-size:12px; font-weight:400; color:#52606d; }
     </style>
     <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><button class="gear" type="button">설정</button></div>
     <form class="panel" hidden></form>`;
@@ -115,7 +116,8 @@
 
   function openPanel(note) {
     const c = loadConfig();
-    panel.innerHTML = `<h2>예약 자동입력 설정</h2>
+    const ver = typeof GM_info !== 'undefined' ? GM_info.script.version : '';
+    panel.innerHTML = `<h2>예약 자동입력 설정 <span class="ver">${ver ? '버전 ' + ver : ''}</span></h2>
       <p class="sub">이 사이트(${location.hostname})에 저장됩니다. 다른 업체 사이트에서는 따로 입력하세요.</p>
       <p class="err">${note || ''}</p>`;
     for (const f of FIELDS) {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.4.0
+// @version      2.5.0
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -134,7 +134,7 @@
       .pick { display:flex; flex-wrap:wrap; gap:6px; }
       .pick[hidden] { display:none; }
     </style>
-    <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><span class="pick" hidden><button class="pnew" type="button">새 그룹</button><button class="pundo" type="button">하나 지우기</button><button class="pcancel" type="button">취소</button><button class="pdone primary" type="button">완료</button></span><button class="start primary" type="button" hidden>예약 대기 시작</button><button class="gear" type="button">설정</button></div>
+    <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><span class="pick" hidden><button class="pnew" type="button">새 그룹</button><button class="pundo" type="button">하나 지우기</button><button class="pcancel" type="button">취소</button><button class="pdone primary" type="button">완료</button></span><button class="start primary" type="button" hidden>예약 대기 시작</button><button class="stop" type="button" hidden>중지</button><button class="gear" type="button">설정</button></div>
     <form class="panel" hidden></form>`;
   document.documentElement.appendChild(host);
   const $msg = ui.querySelector('.msg');
@@ -321,12 +321,28 @@
   const fishRadios = (doc = document) => [...doc.querySelectorAll('input[type=radio][name=PS_N_UID]')];
 
   // 1) 오픈 전: 페이지를 새로고침하지 않고 fetch로 확인하다가 열리면 reload
+  // 대기 중지: "중지"를 누르면 확인 요청을 멈추고, 이 탭의 시작 표시도 지워 새로고침해도 다시 시작하지 않음
+  let stopped = false;
+  let runId = 0; // 중지 후 다시 시작해도 이전 대기 루프가 함께 돌지 않게
+  const stopBtn = ui.querySelector('.stop');
+  stopBtn.onclick = () => {
+    stopped = true;
+    stopBtn.hidden = true;
+    try { sessionStorage.removeItem(TARGET_KEY); } catch (e) { /* 무시 */ }
+    showStep1Start('대기를 중지했습니다. 다시 하려면 "예약 대기 시작"을 누르세요.');
+  };
+
   async function waitForOpen() {
+    const my = ++runId;
+    stopped = false;
+    const dead = () => stopped || my !== runId;
+    stopBtn.hidden = false;
     const openLabel = CONFIG.openAt ? ` 오픈 ${fmtTime(CONFIG.openAt)}` : '';
     // 오픈 시각이 설정돼 있으면 (오픈 - startBeforeSec)까지는 요청 없이 카운트다운만
     if (CONFIG.openAt) {
       const startAt = new Date(CONFIG.openAt).getTime() - CONFIG.startBeforeSec * 1000;
       while (Date.now() < startAt) {
+        if (dead()) return;
         const s = Math.ceil((startAt - Date.now()) / 1000);
         const hms = new Date(s * 1000).toISOString().slice(11, 19);
         $msg.textContent = `${date}${openLabel} / 확인 시작까지 ${s >= 86400 ? Math.floor(s / 86400) + '일 ' : ''}${hms} (요청 없음)`;
@@ -334,12 +350,13 @@
       }
     }
     let n = 0;
-    while (true) {
+    while (!dead()) {
       n++;
       status(`${date} 오픈 대기 중…${openLabel} (${n}회 확인)`);
       try {
         const html = await fetch(location.href, { cache: 'no-store' }).then((r) => r.text());
-        if (fishRadios(new DOMParser().parseFromString(html, 'text/html')).length) { status('오픈 감지! 새로고침'); location.reload(); return; }
+        if (dead()) return;
+        if (fishRadios(new DOMParser().parseFromString(html, 'text/html')).length) { stopBtn.hidden = true; status('오픈 감지! 새로고침'); location.reload(); return; }
       } catch (e) { /* 네트워크 오류는 다음 주기에 재시도 */ }
       await sleep(CONFIG.pollMs);
     }
@@ -416,13 +433,14 @@
     else fillForm();
   }
 
-  if (isList) startOnList();
-  else if (armedFor(`${date}|${pa}`)) runStep1();
-  else {
-    const d = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
-    status(`${d} 예약 화면입니다. 이 날짜로 자동입력을 하려면 "예약 대기 시작"을 누르세요.`);
+  function showStep1Start(msg) {
+    status(msg);
     const btn = ui.querySelector('.start');
     btn.hidden = false;
     btn.onclick = () => { btn.hidden = true; panel.hidden = true; arm(`${date}|${pa}`); runStep1(); };
   }
+
+  if (isList) startOnList();
+  else if (armedFor(`${date}|${pa}`)) runStep1();
+  else showStep1Start(`${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)} 예약 화면입니다. 이 날짜로 자동입력을 하려면 "예약 대기 시작"을 누르세요.`);
 })();

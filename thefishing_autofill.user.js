@@ -3,9 +3,7 @@
 // @namespace    reserv
 // @version      2.2.0
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
-// @match        https://*.thefishing.kr/index.php*
-// @match        https://*.thefishing.kr/_core/module/reservation_boat_v5.2_seat1/popup.step1.php*
-// @match        https://*.thefishing.kr/_core/module/reservation_boat_v5.2_seat1/popu2.step1.php*
+// @match        https://*.thefishing.kr/*
 // @grant        none
 // @run-at       document-end
 // @updateURL    https://raw.githubusercontent.com/seong-geon-choi/fishing-reserv/main/thefishing_autofill.user.js
@@ -15,9 +13,11 @@
 (function () {
   'use strict';
 
-  // 예약 목록 페이지(index.php?mid=bk)와 예약 화면(step1)에서만 동작
-  const isList = location.pathname.endsWith('/index.php');
-  if (isList && new URLSearchParams(location.search).get('mid') !== 'bk') return;
+  // 예약 목록 페이지(index.php?mid=bk)와 예약 화면(popup/popu2.step1.php)에서만 동작.
+  // @match를 사이트 전체로 둔 이유: Chrome의 Tampermonkey가 "index.php*" 규칙으로 ?mid=bk 주소를 잡지 못함
+  const isList = /^\/(index\.php)?$/.test(location.pathname) && new URLSearchParams(location.search).get('mid') === 'bk';
+  const isStep1 = /^\/_core\/module\/reservation_boat_[^/]+\/popu[p2]\.step1\.php$/.test(location.pathname);
+  if (!isList && !isStep1) return;
 
   // ===================== 설정 항목 =====================
   // 값은 코드가 아니라 화면 위 "설정" 버튼에서 입력합니다. 이 사이트(주소)별로 브라우저에 저장되고, 스크립트가 업데이트돼도 유지됩니다.

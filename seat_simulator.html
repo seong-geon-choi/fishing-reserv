@@ -1,0 +1,544 @@
+<title>낚시배 좌석 시뮬레이터</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: 상단 배 선택 → 배 평면도(SVG, 사이트와 같은 슬롯 좌표, 선수 왼쪽) → 설정 / 결과 2열 (좁으면 1열) */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --fg: #16212b;
+  --muted: #5a6875;
+  --line: #d5dce2;
+  --hull: #e4eaef;
+  --hull-edge: #9aabb9;
+  --deck: #f8fafb;
+  --seat: #ffffff;
+  --seat-edge: #8396a6;
+  --taken: #9aa6b1;
+  --taken-fg: #ffffff;
+  --pick: #e8590c;
+  --pick-fg: #ffffff;
+  --group: #1c6fb8;
+  --group-soft: #d9e8f6;
+  --warn: #b45309;
+  --warn-soft: #fdf0dc;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f161c; --surface: #17212a; --fg: #e6edf3; --muted: #93a3b2; --line: #2a3742;
+    --hull: #1d2a35; --hull-edge: #4c6274; --deck: #22313d; --seat: #2a3a47; --seat-edge: #6d8496;
+    --taken: #4a5864; --taken-fg: #c9d3dc; --pick: #ff7a33; --pick-fg: #1a0d05;
+    --group: #5aa6ec; --group-soft: #1d3346; --warn: #f0a24a; --warn-soft: #3a2a14;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f161c; --surface: #17212a; --fg: #e6edf3; --muted: #93a3b2; --line: #2a3742;
+  --hull: #1d2a35; --hull-edge: #4c6274; --deck: #22313d; --seat: #2a3a47; --seat-edge: #6d8496;
+  --taken: #4a5864; --taken-fg: #c9d3dc; --pick: #ff7a33; --pick-fg: #1a0d05;
+  --group: #5aa6ec; --group-soft: #1d3346; --warn: #f0a24a; --warn-soft: #3a2a14;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+h1 { font-size: 1.45rem; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font-size: 1rem; margin: 0; }
+.sub { color: var(--muted); margin: 4px 0 0; font-size: 0.9rem; max-width: 70ch; }
+.bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tab {
+  font: inherit; font-size: 0.9rem; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--fg); cursor: pointer;
+}
+.tab[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.tab:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, .seat:focus-visible, .slot:focus-visible { outline: 3px solid var(--group); outline-offset: 2px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.shipbox { overflow-x: auto; }
+.shipbox svg { display: block; width: 100%; min-width: 560px; height: auto; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.82rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--seat-edge); background: var(--seat); }
+.sw.taken { background: var(--taken); border-color: var(--taken); }
+.sw.pick { background: var(--pick); border-color: var(--pick); }
+.sw.fb { border: 3px solid var(--pick); }
+.sw.grp { border: 2px dashed var(--group); }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+label.f > span b { color: var(--fg); font-weight: 600; }
+input[type=number], textarea {
+  font-family: var(--font-mono); font-size: 0.92rem; color: var(--fg); background: var(--deck);
+  border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%;
+}
+textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.row > * { flex: 1 1 140px; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 0.9rem; }
+.btn {
+  font: inherit; font-size: 0.85rem; padding: 7px 12px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--deck); color: var(--fg);
+}
+.btn.primary { background: var(--group); color: #fff; border-color: var(--group); }
+.btn[aria-pressed="true"] { background: var(--group); color: #fff; border-color: var(--group); }
+.note { font-size: 0.82rem; color: var(--muted); margin: 0; }
+.warn { background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 8px 10px; font-size: 0.85rem; margin: 0; }
+.editbar { display: none; background: var(--group-soft); border-radius: 8px; padding: 10px 12px; gap: 12px; flex-wrap: wrap; align-items: center; font-size: 0.88rem; }
+.editing .editbar { display: flex; }
+.editbar input { width: 5.5em; }
+.result-seats { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-family: var(--font-mono); font-weight: 600; min-width: 2.4em; text-align: center; padding: 4px 8px; border-radius: 6px;
+  background: var(--pick); color: var(--pick-fg);
+}
+.chip.fb { background: transparent; color: var(--pick); border: 2px solid var(--pick); }
+.big { font-size: 1.05rem; font-weight: 600; margin: 0; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.gtab { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.gtab th, .gtab td { text-align: left; padding: 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.gtab th { color: var(--muted); font-weight: 500; }
+.tag { font-size: 0.75rem; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+.tag.sel { background: var(--pick); color: var(--pick-fg); }
+.tag.no { background: var(--deck); color: var(--muted); border: 1px solid var(--line); }
+.tag.skip { color: var(--muted); }
+pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); border-radius: 6px; padding: 10px; font-family: var(--font-mono); font-size: 0.82rem; overflow-x: auto; white-space: pre; }
+/* svg */
+.hull { fill: var(--hull); stroke: var(--hull-edge); stroke-width: 3; }
+.deckrect { fill: var(--deck); stroke: var(--line); stroke-width: 1.5; }
+.shiplabel { fill: var(--muted); font-family: var(--font-body); font-size: 15px; }
+.seat, .slot { cursor: pointer; }
+.seat rect.box { fill: var(--seat); stroke: var(--seat-edge); stroke-width: 2; transition: fill .12s; }
+.seat text.n { fill: var(--fg); font-family: var(--font-mono); font-weight: 600; font-size: 16px; }
+.seat.taken rect.box { fill: var(--taken); stroke: var(--taken); }
+.seat.taken text.n { fill: var(--taken-fg); text-decoration: line-through; }
+.seat.pick rect.box { fill: var(--pick); stroke: var(--pick); }
+.seat.pick text.n { fill: var(--pick-fg); }
+.seat.fb rect.box { fill: var(--seat); stroke: var(--pick); stroke-width: 4; }
+.seat.fb text.n { fill: var(--pick); }
+.seat .ring { fill: none; stroke: var(--group); stroke-width: 2.5; stroke-dasharray: 5 4; opacity: 0; }
+.seat.ingrp .ring { opacity: 1; }
+.seat .badge circle { fill: var(--fg); }
+.seat .badge text { fill: var(--bg); font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+.slot rect { fill: var(--group-soft); fill-opacity: .35; stroke: var(--group); stroke-width: 1.5; stroke-dasharray: 3 3; pointer-events: all; }
+.slot:hover rect { fill-opacity: .9; }
+.editing .seat rect.box { stroke: var(--group); }
+.editing #shipSvg { touch-action: none; }
+.editing .seat { cursor: grab; }
+.seat.sel rect.box { fill: var(--group-soft); stroke: var(--pick); stroke-width: 4; }
+.seat.dragging { cursor: grabbing; opacity: .85; }
+.slot.drop rect, .seat.drop rect.box { stroke: var(--pick); stroke-width: 3; fill-opacity: 1; }
+.btn:disabled { opacity: .45; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .seat rect.box { transition: none; } }
+</style>
+
+<div class="wrap" id="app">
+  <header>
+    <h1>낚시배 좌석 시뮬레이터</h1>
+    <p class="sub">예약 자동입력 스크립트(<span class="mono">thefishing_autofill.user.js</span>)와 같은 규칙으로 어떤 좌석이 선택될지 미리 확인합니다. 좌석을 눌러 이미 예약된 자리로 표시하세요.</p>
+  </header>
+
+  <div class="tabs" role="tablist" id="shipTabs"></div>
+
+  <section class="panel shipbox" aria-label="좌석 배치도">
+    <div class="bar" style="justify-content:space-between">
+      <h2 id="shipTitle">배치도</h2>
+      <div class="bar">
+        <button class="btn" id="randBtn" type="button">무작위 예약</button>
+        <button class="btn" id="clearBtn" type="button">예약 표시 지우기</button>
+        <button class="btn" id="editBtn" type="button" aria-pressed="false">배치 편집</button>
+      </div>
+    </div>
+    <div class="editbar">
+      <span>좌석을 끌어다 놓거나, 눌러서 고른 뒤 옮길 자리를 누르세요. 다른 좌석 위에 놓으면 서로 자리가 바뀝니다. 아무것도 고르지 않고 빈 칸(점선)을 누르면 "다음 번호" 좌석이 새로 생깁니다.</span>
+      <label class="check">다음 번호 <input type="number" id="nextNo" min="1" max="60" value="1"></label>
+      <button class="btn" id="delBtn" type="button" disabled>선택 좌석 삭제</button>
+      <label class="check">좌석 수 <input type="number" id="genCount" min="2" max="40" value="15"></label>
+      <button class="btn" id="genBtn" type="button">시계방향 자동 배치</button>
+      <button class="btn" id="resetBtn" type="button">원래 배치로</button>
+    </div>
+    <svg id="shipSvg" viewBox="0 0 960 304" role="group" aria-label="배 좌석"></svg>
+    <div class="legend">
+      <span><i class="sw"></i>빈 좌석</span>
+      <span><i class="sw taken"></i>이미 예약됨 (클릭으로 전환)</span>
+      <span><i class="sw pick"></i>그룹 목록에서 선택</span>
+      <span><i class="sw fb"></i>남은 좌석으로 채움</span>
+      <span><i class="sw grp"></i>선택된 그룹 범위</span>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="panel" aria-label="설정">
+      <h2>스크립트 설정</h2>
+      <div class="row">
+        <label class="f"><span><b>예약 인원</b> (people)</span><input type="number" id="people" min="1" max="30" value="4"></label>
+        <label class="check"><input type="checkbox" id="fallback" checked> 부족하면 남은 좌석으로 채움 (fallbackAnySeat)</label>
+      </div>
+      <label class="f"><span><b>좌석 그룹</b> (seatGroups) · 한 줄에 그룹 하나, 앞줄이 우선</span>
+        <textarea id="groups" spellcheck="false"></textarea>
+      </label>
+      <p class="note">스크립트의 <span class="mono">[[8,9,7],[1,2,3]]</span> 형식을 그대로 붙여넣어도 됩니다.</p>
+      <div id="groupWarn" style="display:flex;flex-direction:column;gap:6px"></div>
+    </section>
+
+    <section class="panel" aria-label="결과" aria-live="polite">
+      <h2>시뮬레이션 결과</h2>
+      <div id="result" style="display:flex;flex-direction:column;gap:8px"></div>
+      <table class="gtab" id="gtab"></table>
+      <div class="bar" style="justify-content:space-between">
+        <h2>스크립트에 붙여넣을 설정</h2>
+        <button class="btn primary" id="copyBtn" type="button">복사</button>
+      </div>
+      <pre class="cfg" id="cfgOut"></pre>
+      <p class="note">남은 좌석으로 채우는 순서는 사이트 좌석판의 화면 순서(선수 위쪽 → 윗줄 → 선미 → 선수 아래쪽 → 아랫줄)를 따릅니다. 스크립트도 같은 순서로 고릅니다.</p>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---- 사이트 좌석판 슬롯 좌표 (reservation_boat_v5.2_seat1, 960x304, 선수 왼쪽) ----
+  // 1~5: 선수 위쪽 꺾임, 6~25: 윗줄, 26~32: 선미, 33~37: 선수 아래쪽 꺾임, 38~57: 아랫줄
+  // 슬롯 번호 순서 = 사이트 화면(DOM) 순서 = 스크립트가 남은 좌석을 고르는 순서
+  const SLOT = {};
+  [[35,120],[53,85],[81,57],[117,39],[157,30]].forEach((p, i) => SLOT[1 + i] = p);
+  for (let i = 0; i < 20; i++) SLOT[6 + i] = [200 + i * 34, 37];
+  for (let i = 0; i < 7; i++) SLOT[26 + i] = [890, 36 + i * 33];
+  [[157,239],[117,231],[81,216],[53,188],[35,156]].forEach((p, i) => SLOT[33 + i] = p);
+  for (let i = 0; i < 20; i++) SLOT[38 + i] = [200 + i * 34, 233];
+  const SLOT_IDS = Object.keys(SLOT).map(Number).sort((a, b) => a - b);
+
+  // ---- 배 프리셋: {슬롯: 좌석번호} — 사이트에서 확인한 실제 배치 ----
+  const PRESETS = {
+    manseok: {
+      name: '만석호', cap: 15,
+      slots: { 6: 15, 9: 14, 12: 13, 15: 12, 18: 11, 21: 10, 25: 9, 35: 1, 38: 2, 41: 3, 44: 4, 47: 5, 50: 6, 53: 7, 57: 8 },
+      groups: [[8, 9, 7, 10, 11, 6], [2, 3, 14, 15, 1, 4, 13], [8, 9, 10, 11], [5, 12]], people: 4, taken: [9],
+    },
+    nadaese: {
+      name: '나대세호', cap: 20,
+      slots: { 2: 1, 4: 2, 6: 3, 8: 4, 11: 5, 14: 6, 17: 7, 20: 8, 23: 9, 25: 10, 34: 19, 36: 20, 38: 18, 40: 17, 43: 16, 46: 15, 49: 14, 52: 13, 55: 12, 57: 11 },
+      groups: [[1, 2, 3, 4], [10, 11, 12, 13]], people: 4, taken: [],
+    },
+    custom: { name: '직접 설정', cap: 0, slots: null, groups: [[1, 2, 3]], people: 3, taken: [] },
+  };
+
+  // 시계방향 자동 배치: 윗줄 선수→선미 1..k, 아랫줄 선미→선수 k+1..n
+  function generate(n) {
+    const topN = Math.ceil(n / 2), botN = n - topN;
+    const pick = (start, count) => Array.from({ length: count }, (_, i) => start + Math.round(count === 1 ? 9 : i * 19 / (count - 1)));
+    const slots = {};
+    pick(6, Math.min(topN, 20)).forEach((s, i) => slots[s] = i + 1);
+    pick(38, Math.min(botN, 20)).reverse().forEach((s, i) => slots[s] = topN + 1 + i);
+    return slots;
+  }
+  PRESETS.custom.slots = generate(12);
+  PRESETS.custom.cap = 12;
+
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 저장 불가 환경 */ } },
+  };
+  const groupsToText = (g) => g.map((x) => x.join(', ')).join('\n');
+  const parseList = (s) => (String(s).match(/\d+/g) || []).map(Number);
+  function parseGroups(text) {
+    const t = text.trim();
+    if (!t) return [];
+    if (t.includes('[')) return (t.match(/\[[^\[\]]*\]/g) || []).map(parseList).filter((g) => g.length);
+    return t.split(/\n+/).map(parseList).filter((g) => g.length);
+  }
+
+  const VER = 2; // 배치 저장 형식 버전
+  let shipKey = store.get('sim.ship');
+  if (!PRESETS[shipKey]) shipKey = 'manseok';
+  const state = {};
+  function loadShip(key) {
+    if (state[key]) return state[key];
+    const p = PRESETS[key];
+    const saved = store.get('sim2.' + key);
+    state[key] = saved && saved.v === VER ? saved : {
+      v: VER, slots: { ...p.slots }, groupsText: groupsToText(p.groups), people: p.people, fallback: true, taken: p.taken.slice(),
+    };
+    return state[key];
+  }
+  const cur = () => loadShip(shipKey);
+  const save = () => store.set('sim2.' + shipKey, cur());
+  let editing = false;
+  let selSlot = null; // 편집 중 선택된 좌석의 슬롯
+
+  const seatsInOrder = () => SLOT_IDS.filter((s) => cur().slots[s] != null).map((s) => cur().slots[s]);
+  const isPresetLayout = () => JSON.stringify(cur().slots) === JSON.stringify(PRESETS[shipKey].slots);
+
+  // ---- 스크립트와 동일한 좌석 선택 로직 ----
+  function simulate({ order, taken, groups, people, fallback }) {
+    const exists = new Set(order);
+    const isFree = (n) => exists.has(n) && !taken.has(n);
+    const gi = groups.findIndex((g) => g.filter(isFree).length >= people);
+    const base = gi >= 0 ? groups[gi] : [...new Set(groups.flat())];
+    let picks = base.filter(isFree).slice(0, people);
+    const fromList = picks.length;
+    if (picks.length < people && fallback) {
+      const others = order.filter((n) => isFree(n) && !picks.includes(n));
+      picks = picks.concat(others.slice(0, people - picks.length));
+    }
+    return { gi, picks, fromList, groupFree: groups.map((g) => g.filter(isFree)) };
+  }
+
+  // ---- 그리기 ----
+  const NS = 'http://www.w3.org/2000/svg';
+  const mk = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+
+  function draw(sim, groups) {
+    const s = cur();
+    const svg = $('shipSvg');
+    svg.textContent = '';
+    mk('path', { class: 'hull', d: 'M 6 152 C 30 70, 100 16, 190 14 L 932 14 Q 954 14 954 36 L 954 268 Q 954 290 932 290 L 190 290 C 100 288, 30 234, 6 152 Z' }, svg);
+    mk('rect', { class: 'deckrect', x: 236, y: 98, width: 600, height: 108, rx: 10 }, svg);
+    const order = seatsInOrder();
+    mk('text', { class: 'shiplabel', x: 536, y: 157, 'text-anchor': 'middle' }, svg).textContent = PRESETS[shipKey].name + ' · ' + order.length + '석';
+    mk('text', { class: 'shiplabel', x: 150, y: 157, 'text-anchor': 'middle' }, svg).textContent = '◀ 선수';
+    mk('text', { class: 'shiplabel', x: 862, y: 157, 'text-anchor': 'middle' }, svg).textContent = '선미';
+
+    const taken = new Set(s.taken);
+    const pickIdx = new Map(sim.picks.map((n, i) => [n, i]));
+    const grpSet = new Set(sim.gi >= 0 ? groups[sim.gi] : []);
+    for (const slot of SLOT_IDS) {
+      const [x, y] = SLOT[slot];
+      const n = s.slots[slot];
+      if (n == null) {
+        if (!editing) continue;
+        const g = mk('g', { class: 'slot', tabindex: 0, role: 'button', 'data-slot': slot, 'aria-label': '빈 칸 ' + slot }, svg);
+        mk('rect', { x: x + 2, y: y + 2, width: 28, height: 28, rx: 6 }, g);
+        continue;
+      }
+      const g = mk('g', { class: 'seat', tabindex: 0, role: 'button', 'data-slot': slot, 'data-n': n,
+        'aria-label': n + '번 좌석' + (taken.has(n) ? ', 예약됨' : ''), 'aria-pressed': taken.has(n) }, svg);
+      if (editing && slot === selSlot) g.classList.add('sel');
+      if (!editing) {
+        if (taken.has(n)) g.classList.add('taken');
+        if (pickIdx.has(n)) g.classList.add(pickIdx.get(n) < sim.fromList ? 'pick' : 'fb');
+        if (grpSet.has(n)) g.classList.add('ingrp');
+      }
+      mk('rect', { class: 'ring', x: x - 4, y: y - 4, width: 40, height: 40, rx: 9 }, g);
+      mk('rect', { class: 'box', x, y, width: 32, height: 32, rx: 7 }, g);
+      mk('text', { class: 'n', x: x + 16, y: y + 22, 'text-anchor': 'middle' }, g).textContent = n;
+      if (!editing && pickIdx.has(n)) {
+        const b = mk('g', { class: 'badge' }, g);
+        mk('circle', { cx: x + 32, cy: y, r: 9 }, b);
+        mk('text', { x: x + 32, y: y + 4, 'text-anchor': 'middle' }, b).textContent = pickIdx.get(n) + 1;
+      }
+    }
+  }
+
+  function render() {
+    const s = cur();
+    const groups = parseGroups(s.groupsText);
+    const people = Math.max(1, parseInt(s.people, 10) || 1);
+    const order = seatsInOrder();
+    s.taken = s.taken.filter((n) => order.includes(n));
+    const taken = new Set(s.taken);
+    const sim = simulate({ order, taken, groups, people, fallback: s.fallback });
+    draw(sim, groups);
+
+    const p = PRESETS[shipKey];
+    $('shipTitle').textContent = p.name + ' 배치도' + (shipKey !== 'custom' && !isPresetLayout() ? ' (편집됨)' : '');
+    $('app').classList.toggle('editing', editing);
+    $('delBtn').disabled = selSlot == null || s.slots[selSlot] == null;
+
+    // 결과
+    const freeTotal = order.filter((n) => !taken.has(n)).length;
+    let html = '';
+    if (sim.picks.length) html += '<div class="result-seats">' + sim.picks.map((n, i) => `<span class="chip ${i < sim.fromList ? '' : 'fb'}">${n}</span>`).join('') + '</div>';
+    let how;
+    if (sim.gi >= 0) how = `그룹 ${sim.gi + 1}에 빈 좌석이 ${sim.groupFree[sim.gi].length}개 있어, 이 그룹에서 적은 순서대로 ${sim.fromList}석을 골랐습니다.`;
+    else if (sim.fromList > 0) how = `빈 좌석이 ${people}개 이상인 그룹이 없어, 그룹들을 이어 붙인 목록에서 차례로 ${sim.fromList}석을 골랐습니다.`;
+    else how = '그룹 목록에 빈 좌석이 없습니다.';
+    const fb = sim.picks.length - sim.fromList;
+    if (fb > 0) how += ` 모자란 ${fb}석은 남은 좌석에서 화면 순서대로 채웠습니다.`;
+    html += `<p class="big">${sim.picks.length ? `예약 인원 ${sim.picks.length}명` : '좌석 선택 없음'}</p><p class="note" style="color:var(--fg)">${how}</p>`;
+    if (sim.picks.length && sim.picks.length < people) html += `<p class="warn">설정 인원은 ${people}명이지만 ${sim.picks.length}석만 골라져 <b>${sim.picks.length}명으로 예약</b>됩니다. 사이트가 고른 좌석 수에 맞춰 인원을 바꾸기 때문입니다.</p>`;
+    if (!sim.picks.length) html += `<p class="warn">좌석 없이 인원 ${people}명만 선택하고 진행합니다. 이때 사이트가 좌석을 어떻게 처리하는지는 확인되지 않았습니다.</p>`;
+    if (people > freeTotal) html += `<p class="warn">남은 좌석(${freeTotal}석)보다 인원이 많습니다. 실제 사이트에서는 대기자 확인창이 뜹니다.</p>`;
+    $('result').innerHTML = html;
+
+    // 그룹 표
+    $('gtab').innerHTML = !groups.length ? '' :
+      '<thead><tr><th>그룹</th><th>좌석 (적은 순서)</th><th>빈 좌석</th><th>판정</th></tr></thead><tbody>' +
+      groups.map((g, i) => {
+        const free = sim.groupFree[i].length;
+        const tag = sim.gi === i ? '<span class="tag sel">선택</span>'
+          : sim.gi >= 0 && i > sim.gi ? '<span class="tag skip">확인 안 함</span>'
+          : `<span class="tag no">${free}/${people} 부족</span>`;
+        const seats = g.map((n) => !order.includes(n) ? `<span title="배에 없는 번호" style="color:var(--warn)">${n}?</span>` : taken.has(n) ? `<s>${n}</s>` : n).join(', ');
+        return `<tr><td class="mono">${i + 1}</td><td class="mono">${seats}</td><td class="mono">${free}</td><td>${tag}</td></tr>`;
+      }).join('') + '</tbody>';
+
+    // 경고
+    const warns = [];
+    const missing = [...new Set(groups.flat())].filter((n) => !order.includes(n));
+    if (missing.length) warns.push(`배에 없는 좌석 번호: ${missing.join(', ')}. 스크립트는 이 번호를 예약 불가로 취급합니다.`);
+    groups.forEach((g, i) => {
+      if (g.length < people) warns.push(`그룹 ${i + 1}은 ${g.length}석이라 인원 ${people}명일 때 그룹으로는 선택되지 않습니다. 이어 붙인 목록의 순서에만 쓰입니다.`);
+      else if (groups.some((h, j) => j < i && g.every((n) => h.includes(n)))) warns.push(`그룹 ${i + 1}은 앞 그룹에 모두 포함돼 선택될 일이 없습니다.`);
+    });
+    const dup = order.filter((n, i) => order.indexOf(n) !== i);
+    if (dup.length) warns.push(`배치에 중복된 좌석 번호가 있습니다: ${[...new Set(dup)].join(', ')}`);
+    $('groupWarn').innerHTML = warns.map((w) => `<p class="warn">${w}</p>`).join('');
+
+    $('cfgOut').textContent =
+      `people: ${people},\n` +
+      `seatGroups: [${groups.map((g) => '[' + g.join(',') + ']').join(', ')}],\n` +
+      `fallbackAnySeat: ${s.fallback},`;
+  }
+
+  function syncInputs() {
+    const s = cur();
+    $('people').value = s.people;
+    $('fallback').checked = s.fallback;
+    $('groups').value = s.groupsText;
+    const nums = Object.values(s.slots);
+    $('genCount').value = nums.length || 12;
+    $('nextNo').value = (nums.length ? Math.max(...nums) : 0) + 1;
+    document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-selected', t.dataset.key === shipKey));
+  }
+
+  // ---- 이벤트 ----
+  Object.entries(PRESETS).forEach(([key, p]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'tab'; b.setAttribute('role', 'tab'); b.dataset.key = key;
+    b.textContent = key === 'custom' ? p.name : `${p.name} (${p.cap}석)`;
+    b.addEventListener('click', () => { shipKey = key; store.set('sim.ship', key); syncInputs(); render(); });
+    $('shipTabs').appendChild(b);
+  });
+
+  // 좌석 이동: 빈 칸이면 이동, 다른 좌석이면 서로 맞바꿈
+  function moveSeat(from, to) {
+    const s = cur();
+    if (from === to || s.slots[from] == null) return;
+    const a = s.slots[from], b = s.slots[to];
+    s.slots[to] = a;
+    if (b != null) s.slots[from] = b; else delete s.slots[from];
+  }
+
+  // 편집 중 슬롯을 눌렀을 때 (클릭·키보드)
+  function editTap(slot) {
+    const s = cur();
+    if (selSlot != null) {
+      if (slot === selSlot) selSlot = null;
+      else { moveSeat(selSlot, slot); selSlot = null; }
+    } else if (s.slots[slot] != null) {
+      selSlot = slot;
+    } else {
+      const n = parseInt($('nextNo').value, 10);
+      if (!n) return;
+      for (const k in s.slots) if (s.slots[k] === n) delete s.slots[k];
+      s.slots[slot] = n;
+      $('nextNo').value = n + 1;
+    }
+  }
+
+  function activate(target) {
+    const slotEl = target.closest('.slot, .seat');
+    if (!slotEl) return;
+    const slot = Number(slotEl.dataset.slot);
+    if (editing) editTap(slot);
+    else {
+      const s = cur(), n = s.slots[slot], i = s.taken.indexOf(n);
+      if (i >= 0) s.taken.splice(i, 1); else s.taken.push(n);
+    }
+    save(); render();
+    const again = $('shipSvg').querySelector(`[data-slot="${slot}"]`);
+    if (again && target.matches(':focus')) again.focus();
+  }
+
+  // ---- 끌어다 놓기 (편집 중) ----
+  const svgEl = $('shipSvg');
+  const toSvg = (e) => { const m = svgEl.getScreenCTM().inverse(); return [e.clientX * m.a + e.clientY * m.c + m.e, e.clientX * m.b + e.clientY * m.d + m.f]; };
+  function nearestSlot([x, y]) {
+    let best = null, bd = 30 * 30;
+    for (const id of SLOT_IDS) { const [sx, sy] = SLOT[id]; const d = (sx + 16 - x) ** 2 + (sy + 16 - y) ** 2; if (d < bd) { bd = d; best = id; } }
+    return best;
+  }
+  let drag = null; // {from, start:[x,y], el, moved, over}
+  svgEl.addEventListener('pointerdown', (e) => {
+    if (!editing) return;
+    const g = e.target.closest('.seat');
+    if (!g) return;
+    drag = { from: Number(g.dataset.slot), start: toSvg(e), el: g, moved: false, over: null };
+    svgEl.setPointerCapture(e.pointerId);
+  });
+  svgEl.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const [x, y] = toSvg(e);
+    const dx = x - drag.start[0], dy = y - drag.start[1];
+    if (!drag.moved && dx * dx + dy * dy < 36) return;
+    drag.moved = true;
+    drag.el.classList.add('dragging');
+    svgEl.appendChild(drag.el); // 맨 위에 그리기
+    drag.el.setAttribute('transform', `translate(${dx} ${dy})`);
+    const over = nearestSlot([x, y]);
+    if (over !== drag.over) {
+      svgEl.querySelectorAll('.drop').forEach((n) => n.classList.remove('drop'));
+      const t = over != null && over !== drag.from && svgEl.querySelector(`[data-slot="${over}"]:not(.dragging)`);
+      if (t) t.classList.add('drop');
+      drag.over = over;
+    }
+  });
+  function endDrag(e, cancel) {
+    if (!drag) return;
+    const d = drag; drag = null;
+    if (d.moved) {
+      if (!cancel && d.over != null) { moveSeat(d.from, d.over); selSlot = null; save(); }
+      render();
+    } else if (!cancel) {
+      activate(d.el);
+    }
+    suppressUntil = performance.now() + 400; // 뒤따르는 click 이벤트 중복 처리 방지
+  }
+  let suppressUntil = 0;
+  svgEl.addEventListener('pointerup', (e) => endDrag(e, false));
+  svgEl.addEventListener('pointercancel', (e) => endDrag(e, true));
+  svgEl.addEventListener('click', (e) => { if (performance.now() < suppressUntil) return; activate(e.target); });
+  svgEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(e.target); }
+    if (e.key === 'Escape' && selSlot != null) { selSlot = null; render(); }
+  });
+  $('delBtn').addEventListener('click', () => {
+    if (selSlot == null) return;
+    delete cur().slots[selSlot]; selSlot = null; save(); render();
+  });
+
+  $('people').addEventListener('input', (e) => { cur().people = e.target.value; save(); render(); });
+  $('fallback').addEventListener('change', (e) => { cur().fallback = e.target.checked; save(); render(); });
+  $('groups').addEventListener('input', (e) => { cur().groupsText = e.target.value; save(); render(); });
+  $('editBtn').addEventListener('click', () => { editing = !editing; selSlot = null; $('editBtn').setAttribute('aria-pressed', editing); render(); });
+  $('genBtn').addEventListener('click', () => {
+    const n = Math.max(2, Math.min(40, parseInt($('genCount').value, 10) || 2));
+    cur().slots = generate(n); save(); syncInputs(); render();
+  });
+  $('resetBtn').addEventListener('click', () => { cur().slots = { ...PRESETS[shipKey].slots }; save(); syncInputs(); render(); });
+  $('clearBtn').addEventListener('click', () => { cur().taken = []; save(); render(); });
+  $('randBtn').addEventListener('click', () => {
+    const all = seatsInOrder().slice();
+    for (let i = all.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [all[i], all[j]] = [all[j], all[i]]; }
+    cur().taken = all.slice(0, Math.floor(all.length * (0.25 + Math.random() * 0.35)));
+    save(); render();
+  });
+  function selectCfg() { const r = document.createRange(); r.selectNodeContents($('cfgOut')); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+  $('copyBtn').addEventListener('click', () => {
+    const done = () => { $('copyBtn').textContent = '복사됨'; setTimeout(() => { $('copyBtn').textContent = '복사'; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText($('cfgOut').textContent).then(done).catch(selectCfg);
+    else selectCfg();
+  });
+
+  syncInputs();
+  render();
+})();
+</script>

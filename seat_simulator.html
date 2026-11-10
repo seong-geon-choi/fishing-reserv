@@ -49,6 +49,7 @@
 * { box-sizing: border-box; }
 body { margin: 0;
   background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  word-break: keep-all; overflow-wrap: break-word;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-block: 20px 40px;
 }
@@ -140,6 +141,8 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
 .slot.drop rect, .seat.drop rect.box { stroke: var(--pick); stroke-width: 3; fill-opacity: 1; }
 .btn:disabled { opacity: .45; cursor: default; }
 @media (prefers-reduced-motion: reduce) { .seat rect.box { transition: none; } }
+.swipe-hint { display: none; }
+@media (max-width: 600px) { .swipe-hint { display: block; } }
 </style>
 </head>
 <body>
@@ -170,6 +173,7 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
       <button class="btn" id="genBtn" type="button">시계방향 자동 배치</button>
       <button class="btn" id="resetBtn" type="button">원래 배치로</button>
     </div>
+    <p class="note swipe-hint">배 그림을 옆으로 밀면 나머지 좌석이 보입니다.</p>
     <svg id="shipSvg" viewBox="0 0 960 304" role="group" aria-label="배 좌석"></svg>
     <div class="legend">
       <span><i class="sw"></i>빈 좌석</span>

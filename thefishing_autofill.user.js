@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.5.0
+// @version      2.5.0.20261110.225035
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -146,8 +146,11 @@
     panel.dataset.shipId = ship ? ship.id : '';
     const all = loadConfig();
     const c = ship ? forShip(all, ship.id) : all;
-    const ver = typeof GM_info !== 'undefined' ? GM_info.script.version : '';
-    panel.innerHTML = `<h2>예약 자동입력 설정 <span class="ver">${ver ? '버전 ' + ver : ''}</span></h2>
+    // 버전 "2.5.0.20261110.213045" → "버전 2.5.0 · 수정 2026-11-10 21:30:45"
+    const raw = typeof GM_info !== 'undefined' ? GM_info.script.version : '';
+    const vm = raw.match(/^(d+.d+.d+).(d{4})(d{2})(d{2})(?:.(d{2})(d{2})(d{2}))?$/);
+    const ver = !raw ? '' : vm ? `버전 ${vm[1]} · 수정 ${vm[2]}-${vm[3]}-${vm[4]}${vm[5] ? ` ${vm[5]}:${vm[6]}:${vm[7]}` : ''}` : `버전 ${raw}`;
+    panel.innerHTML = `<h2>예약 자동입력 설정 <span class="ver">${ver}</span></h2>
       <p class="sub">이 사이트(${location.hostname})에 저장됩니다. 다른 업체 사이트에서는 따로 입력하세요.</p>
       <p class="err">${note || ''}</p>`;
     let shipHeadDone = false;

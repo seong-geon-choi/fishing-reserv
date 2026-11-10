@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.4.0.1110-233135
+// @version      2.4.1.1110-234411
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
+// @match        https://*.sunsang24.com/mypage/reservation_default_ready/*
 // @grant        none
 // @run-at       document-end
 // @updateURL    https://raw.githubusercontent.com/seong-geon-choi/fishing-reserv/main/sunsang24_autofill.user.js
@@ -165,15 +166,22 @@
   const FLAG = 'ss24_auto_schedule'; // 이 스크립트가 예약 화면으로 보냈다는 표시
 
   // 일정 페이지 HTML에서 원하는 날짜의 "바로예약" 일정번호 찾기
+  // 사이트의 "바로예약" 버튼과 같은 규칙: 일정번호가 있으면 일반 예약, 0이면 선택출항 예약(날짜/배번호)
+  function reserveUrl(btn) {
+    const no = +btn.dataset.schedule_no;
+    if (no > 0) return `/mypage/reservation_ready/${no}`;
+    return btn.dataset.sdate && btn.dataset.ship_no ? `/mypage/reservation_default_ready/${btn.dataset.sdate}/${btn.dataset.ship_no}` : null;
+  }
+
   function findSchedule(doc) {
     for (const td of doc.querySelectorAll('td.date_info')) {
       const m = td.textContent.match(/(\d+)월\s*(\d+)일/);
       if (!m || +m[1] !== M || +m[2] !== D) continue;
       const row = td.closest('tr');
       for (const btn of row.querySelectorAll('button.btn_user_reservation[data-schedule_no]')) {
-      if (!+btn.dataset.schedule_no) continue; // 일정번호 0 = 아직 일정이 없는 자리 (열림 아님)
+      if (btn.dataset.ship_status_code === 'END_READY') continue; // 전화 예약만 가능한 배
         const ship = btn.closest('td.ship_info')?.textContent || '';
-        if (!shipNames.length || shipNames.some((s) => ship.includes(s))) return btn.dataset.schedule_no;
+        if (!shipNames.length || shipNames.some((s) => ship.includes(s))) return reserveUrl(btn);
       }
     }
     return null;
@@ -182,9 +190,9 @@
   // 하루치 일정 응답에서 "바로예약" 일정번호 찾기 (날짜 칸 없이 배별 줄만 옴)
   function findInDay(doc) {
     for (const btn of doc.querySelectorAll('button.btn_user_reservation[data-schedule_no]')) {
-      if (!+btn.dataset.schedule_no) continue; // 일정번호 0 = 아직 일정이 없는 자리 (열림 아님)
+      if (btn.dataset.ship_status_code === 'END_READY') continue; // 전화 예약만 가능한 배
       const ship = btn.closest('td.ship_info')?.textContent || '';
-      if (!shipNames.length || shipNames.some((s) => ship.includes(s))) return btn.dataset.schedule_no;
+      if (!shipNames.length || shipNames.some((s) => ship.includes(s))) return reserveUrl(btn);
     }
     return null;
   }
@@ -219,7 +227,7 @@
         await sleep(Math.min(1000, startAt - serverNow()));
       }
     }
-    const no = await pollOverlap(async (signal) => {
+    const url = await pollOverlap(async (signal) => {
       // 하루치 일정(사이트가 예약 완료 후 쓰는 요청)만 받아 확인: 한 달치 페이지보다 15~20배 작음
       const r = await fetch(`/ship/schedule_fleet/${CONFIG.date}/0/simple_day1`, { cache: 'no-store', signal });
       if (r.ok) return findInDay(new DOMParser().parseFromString(`<table>${await r.text()}</table>`, 'text/html'));
@@ -227,11 +235,11 @@
       const html = await fetch(`/ship/schedule_fleet/${ym}`, { cache: 'no-store', signal }).then((x) => x.text());
       return findSchedule(new DOMParser().parseFromString(html, 'text/html'));
     }, dead, label);
-    if (!no) return;
+    if (!url) return;
     stopBtn.hidden = true;
-    status(`예약 오픈 감지! 예약 화면으로 이동합니다 (일정 ${no})`);
-    try { sessionStorage.setItem(FLAG, no); } catch (e) { /* 저장 불가 시 자동 제출만 생략됨 */ }
-    location.href = `/mypage/reservation_ready/${no}`;
+    status(`예약 오픈 감지! 예약 화면으로 이동합니다 (${url.split('/').slice(-2).join('/')})`);
+    try { sessionStorage.setItem(FLAG, url); } catch (e) { /* 저장 불가 시 자동 제출만 생략됨 */ }
+    location.href = url;
   }
 
   // ---------- 서버 시계 보정: 사이트 응답의 Date 헤더로 PC 시계와의 차이를 잼 ----------
@@ -367,8 +375,8 @@
     return;
   }
 
-  if (location.pathname.startsWith('/mypage/reservation_ready/')) {
-    const scheduleNo = location.pathname.split('/').pop();
+  if (/^\/mypage\/reservation_(default_)?ready\//.test(location.pathname)) {
+    const scheduleNo = location.pathname; // 이 스크립트가 보낸 예약 화면 주소와 비교
     let fromScript = false;
     try { fromScript = sessionStorage.getItem(FLAG) === scheduleNo; sessionStorage.removeItem(FLAG); } catch (e) { /* 무시 */ }
     const loggedOut = !document.getElementById('btn_payment') && document.querySelector('.btn_payment');

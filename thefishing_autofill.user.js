@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.5.1.1110-225502
+// @version      2.6.0.1110-232259
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -323,7 +323,59 @@
   // 낚시종류 선택지(라디오)만. 페이지에는 같은 이름의 숨은 칸(ps_form)도 있음
   const fishRadios = (doc = document) => [...doc.querySelectorAll('input[type=radio][name=PS_N_UID]')];
 
-  // 1) 오픈 전: 페이지를 새로고침하지 않고 fetch로 확인하다가 열리면 reload
+  // ---------- 서버 시계 보정: 사이트 응답의 Date 헤더로 PC 시계와의 차이를 잼 ----------
+  let clockOffset = 0; // 서버시각 - PC시각 (ms)
+  const serverNow = () => Date.now() + clockOffset;
+  async function syncClock() {
+    const samples = [];
+    for (let i = 0; i < 3; i++) {
+      try {
+        const t0 = Date.now();
+        const r = await fetch('/favicon.ico', { method: 'HEAD', cache: 'no-store' });
+        const t1 = Date.now();
+        const d = Date.parse(r.headers.get('date') || '');
+        if (!isNaN(d)) samples.push(d + 500 - (t0 + t1) / 2); // Date 헤더는 초 단위라 0.5초 보정
+      } catch (e) { /* 실패하면 PC 시계 사용 */ }
+    }
+    if (samples.length) clockOffset = samples.sort((a, b) => a - b)[Math.floor(samples.length / 2)];
+  }
+  const offsetNote = () => Math.abs(clockOffset) >= 1000
+    ? ` · 서버 시계 기준(PC가 ${Math.round(Math.abs(clockOffset) / 1000)}초 ${clockOffset > 0 ? '늦음' : '빠름'})` : '';
+
+  // ---------- 겹쳐 보내기: 응답이 늦어도 끊지 않고 기다리되, 5초 넘게 응답이 없으면 하나 더 보냄 (최대 3개) ----------
+  // probe(signal) → 열렸으면 결과 객체, 아니면 null
+  async function pollOverlap(probe, dead, label) {
+    const MAX_INFLIGHT = 3, STAGGER_MS = 5000, GIVE_UP_MS = 60000;
+    let found = null, inflight = 0, sent = 0, lastSent = 0;
+    const fire = () => {
+      inflight++; sent++; lastSent = Date.now();
+      const ctl = new AbortController();
+      const kill = setTimeout(() => ctl.abort(), GIVE_UP_MS); // 60초 넘게 응답 없는 요청만 정리
+      probe(ctl.signal).then((r) => { if (r && !found) found = r; }).catch(() => {}).finally(() => { clearTimeout(kill); inflight--; });
+    };
+    while (!found && !dead()) {
+      const since = Date.now() - lastSent;
+      if ((inflight === 0 && since >= CONFIG.pollMs) || (inflight > 0 && inflight < MAX_INFLIGHT && since >= STAGGER_MS)) fire();
+      status(`${label} 오픈 대기 중… (${sent}회 확인)${inflight > 1 ? ` · 사이트 응답 지연, 응답 대기 ${inflight}개` : ''}`);
+      await sleep(100);
+    }
+    return dead() ? null : found;
+  }
+
+  // 낚시종류 고르기: 키워드가 하나라도 들어간 종류 중 맨 위, 없으면 첫 번째
+  function pickFish(radios) {
+    const usable = radios.filter((r) => !r.disabled);
+    return usable.find((r) => CONFIG.fishKeywords.some((k) => (r.closest('tr')?.textContent || '').includes(k))) || usable[0];
+  }
+  // 낚시종류가 선택된 예약 화면 주소 (사이트의 ps_url(date, PA, PH, PS)과 같은 주소)
+  function fishUrl(radio) {
+    const m = (radio.getAttribute('onclick') || '').match(/ps_url\('(\d+)',\s*'(\d+)',\s*'(\d*)',\s*'(\d+)'\)/);
+    const [d, p, ph, ps] = m ? m.slice(1) : [date, pa, '0', radio.value];
+    return new URL(`./popup.step1.php?date=${d}&PA_N_UID=${p}&PH_N_UID=${ph || 0}&PS_N_UID=${ps}`, location.href).href;
+  }
+  const fishLabel = (r) => (r.closest('tr')?.textContent || r.value).replace(/\s+/g, ' ').trim();
+
+  // 1) 오픈 전: 페이지를 새로고침하지 않고 fetch로 확인하다가, 열리면 낚시종류가 선택된 화면으로 바로 이동
   // 대기 중지: "중지"를 누르면 확인 요청을 멈추고, 이 탭의 시작 표시도 지워 새로고침해도 다시 시작하지 않음
   let stopped = false;
   let runId = 0; // 중지 후 다시 시작해도 이전 대기 루프가 함께 돌지 않게
@@ -341,36 +393,37 @@
     const dead = () => stopped || my !== runId;
     stopBtn.hidden = false;
     const openLabel = CONFIG.openAt ? ` 오픈 ${fmtTime(CONFIG.openAt)}` : '';
-    // 오픈 시각이 설정돼 있으면 (오픈 - startBeforeSec)까지는 요청 없이 카운트다운만
+    // 오픈 시각이 설정돼 있으면 (오픈 - startBeforeSec)까지는 요청 없이 카운트다운만 (서버 시계 기준)
     if (CONFIG.openAt) {
+      status('서버 시계를 확인하는 중…');
+      await syncClock();
       const startAt = new Date(CONFIG.openAt).getTime() - CONFIG.startBeforeSec * 1000;
-      while (Date.now() < startAt) {
+      while (serverNow() < startAt) {
         if (dead()) return;
-        const s = Math.ceil((startAt - Date.now()) / 1000);
+        const s = Math.ceil((startAt - serverNow()) / 1000);
         const hms = new Date(s * 1000).toISOString().slice(11, 19);
-        $msg.textContent = `${date}${openLabel} / 확인 시작까지 ${s >= 86400 ? Math.floor(s / 86400) + '일 ' : ''}${hms} (요청 없음)`;
-        await sleep(Math.min(1000, startAt - Date.now()));
+        $msg.textContent = `${date}${openLabel} / 확인 시작까지 ${s >= 86400 ? Math.floor(s / 86400) + '일 ' : ''}${hms} (요청 없음)${offsetNote()}`;
+        await sleep(Math.min(1000, startAt - serverNow()));
       }
     }
-    let n = 0;
-    while (!dead()) {
-      n++;
-      status(`${date} 오픈 대기 중…${openLabel} (${n}회 확인)`);
-      try {
-        const html = await fetch(location.href, { cache: 'no-store' }).then((r) => r.text());
-        if (dead()) return;
-        if (fishRadios(new DOMParser().parseFromString(html, 'text/html')).length) { stopBtn.hidden = true; status('오픈 감지! 새로고침'); location.reload(); return; }
-      } catch (e) { /* 네트워크 오류는 다음 주기에 재시도 */ }
-      await sleep(CONFIG.pollMs);
-    }
+    const radios = await pollOverlap(async (signal) => {
+      const html = await fetch(location.href, { cache: 'no-store', signal }).then((r) => r.text());
+      const found = fishRadios(new DOMParser().parseFromString(html, 'text/html'));
+      return found.length ? found : null;
+    }, dead, `${date}${openLabel}`);
+    if (!radios) return;
+    // 받은 화면에서 낚시종류를 골라, 그 종류가 선택된 예약 화면으로 바로 이동 (새로고침 + 선택 페이지 로딩 2번 → 1번)
+    stopBtn.hidden = true;
+    const pick = pickFish(radios);
+    status(`오픈 감지! 낚시종류 "${fishLabel(pick)}" 화면으로 이동합니다…`);
+    location.href = fishUrl(pick);
   }
 
-  // 2) 낚시종류 선택 (클릭하면 사이트가 PS_N_UID를 붙여 페이지를 다시 로드함)
+  // 2) 이미 열린 화면에서 낚시종류 선택
   function selectFish() {
-    const radios = fishRadios().filter((r) => !r.disabled);
-    const pick = radios.find((r) => CONFIG.fishKeywords.some((k) => (r.closest('tr')?.innerText || '').includes(k))) || radios[0];
-    status('낚시종류 선택: ' + (pick.closest('tr')?.innerText.replace(/\s+/g, ' ').trim() || pick.value));
-    pick.click();
+    const pick = pickFish(fishRadios());
+    status('낚시종류 선택: ' + fishLabel(pick));
+    location.href = fishUrl(pick);
   }
 
   // 3) 좌석 → 예약자 정보 → 동의
@@ -394,8 +447,24 @@
       document.getElementById('BI_IN').value = String(CONFIG.people);
       window.popup_ajax_step1();
     }
-    // 인원/금액 ajax 완료 대기
-    for (let i = 0; i < 40 && window.jQuery && window.jQuery.active > 0; i++) await sleep(100);
+    // 인원/금액 반영(사이트 ajax) 완료 대기: 혼잡하면 느리니 최대 15초, 안 되면 한 번 더 요청
+    const statEl = document.getElementById('temp_bi_stat');
+    const settled = async (ms) => {
+      const end = Date.now() + ms;
+      while (Date.now() < end) {
+        const idle = !(window.jQuery && window.jQuery.active > 0);
+        if (idle && (!statEl || statEl.value === '확인')) return true;
+        await sleep(100);
+      }
+      return false;
+    };
+    status('인원·금액 반영을 기다리는 중…');
+    let applied = await settled(15000);
+    if (!applied) {
+      status('사이트 응답이 늦어 인원·금액을 다시 요청합니다…');
+      window.popup_ajax_step1();
+      applied = await settled(15000);
+    }
 
     const set = (sel, v) => { const el = document.querySelector(sel); if (el) el.value = v; };
     set('[name=BI_NAME]', CONFIG.name);
@@ -414,6 +483,11 @@
     btn.scrollIntoView({ block: 'center' });
     btn.style.outline = '4px solid red';
     const seats = picks.length ? `좌석 ${picks.join(', ')}번` : '좌석 지정 없음';
+    if (!applied) {
+      // 인원·금액이 확인되지 않은 채로 자동 신청하지 않음
+      status(`${seats}: 사이트 응답이 없어 인원·금액이 확인되지 않았습니다. 화면의 인원과 금액을 확인하고 직접 신청하세요.`);
+      return;
+    }
     if (CONFIG.autoSubmit) {
       status(`${seats}, 인원 ${document.getElementById('BI_IN').value}명으로 예약 신청 중…`);
       btn.click(); // 사이트의 form_check 검증을 거쳐 제출됨
@@ -431,9 +505,28 @@
   }
 
   function runStep1() {
-    if (!fishRadios().length) waitForOpen();
-    else if (!q.get('PS_N_UID')) selectFish();
-    else fillForm();
+    if (q.get('PS_N_UID')) {
+      // 낚시종류까지 고른 화면인데 입력칸이 없으면 (혼잡으로 화면이 제대로 안 열림) 잠시 뒤 다시 열기
+      if (document.getElementById('BI_IN') && document.getElementById('submit')) { fillForm(); return; }
+      if (fishRadios().length || /예약할 수 없는/.test(document.body?.textContent || '')) { waitForOpen(); return; }
+      reloadSoon('예약 화면이 제대로 열리지 않았습니다.');
+      return;
+    }
+    if (fishRadios().length) selectFish();
+    else waitForOpen();
+  }
+  // 화면이 깨졌을 때 다시 열기 (이 탭의 시작 표시가 남아 있어 다시 열리면 이어서 진행)
+  function reloadSoon(why) {
+    let sec = 3;
+    const tick = () => {
+      if (stopped) return;
+      status(`${why} ${sec}초 뒤 다시 엽니다… (그만하려면 중지)`);
+      if (sec-- <= 0) { location.reload(); return; }
+      setTimeout(tick, 1000);
+    };
+    stopped = false;
+    stopBtn.hidden = false;
+    tick();
   }
 
   function showStep1Start(msg) {

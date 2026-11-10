@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.3.1.1110-225502
+// @version      2.4.0.1110-232259
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -194,33 +194,82 @@
     stopBtn.hidden = false;
     const label = `${M}월 ${D}일${shipNames.length ? ` ${shipNames.join('/')}` : ''}${CONFIG.openAt ? ` / 오픈 ${fmtTime(CONFIG.openAt)}` : ''}`;
     if (CONFIG.openAt) {
+      // 오픈 시각까지는 요청 없이 카운트다운만 (서버 시계 기준)
+      status('서버 시계를 확인하는 중…');
+      await syncClock();
       const startAt = new Date(CONFIG.openAt).getTime() - CONFIG.startBeforeSec * 1000;
-      while (Date.now() < startAt) {
+      while (serverNow() < startAt) {
         if (dead()) return;
-        const s = Math.ceil((startAt - Date.now()) / 1000);
+        const s = Math.ceil((startAt - serverNow()) / 1000);
         const hms = new Date(s * 1000).toISOString().slice(11, 19);
-        $msg.textContent = `${label} / 확인 시작까지 ${s >= 86400 ? Math.floor(s / 86400) + '일 ' : ''}${hms} (요청 없음)`;
-        await sleep(Math.min(1000, startAt - Date.now()));
+        $msg.textContent = `${label} / 확인 시작까지 ${s >= 86400 ? Math.floor(s / 86400) + '일 ' : ''}${hms} (요청 없음)${offsetNote()}`;
+        await sleep(Math.min(1000, startAt - serverNow()));
       }
     }
-    let n = 0;
-    while (!dead()) {
-      n++;
-      status(`${label} 오픈 대기 중… (${n}회 확인)`);
+    const no = await pollOverlap(async (signal) => {
+      const html = await fetch(`/ship/schedule_fleet/${ym}`, { cache: 'no-store', signal }).then((r) => r.text());
+      return findSchedule(new DOMParser().parseFromString(html, 'text/html'));
+    }, dead, label);
+    if (!no) return;
+    stopBtn.hidden = true;
+    status(`예약 오픈 감지! 예약 화면으로 이동합니다 (일정 ${no})`);
+    try { sessionStorage.setItem(FLAG, no); } catch (e) { /* 저장 불가 시 자동 제출만 생략됨 */ }
+    location.href = `/mypage/reservation_ready/${no}`;
+  }
+
+  // ---------- 서버 시계 보정: 사이트 응답의 Date 헤더로 PC 시계와의 차이를 잼 ----------
+  let clockOffset = 0; // 서버시각 - PC시각 (ms)
+  function serverNow() { return Date.now() + clockOffset; }
+  async function syncClock() {
+    const samples = [];
+    for (let i = 0; i < 3; i++) {
       try {
-        const html = await fetch(`/ship/schedule_fleet/${ym}`, { cache: 'no-store' }).then((r) => r.text());
-        if (dead()) return;
-        const no = findSchedule(new DOMParser().parseFromString(html, 'text/html'));
-        if (no) {
-          stopBtn.hidden = true;
-          status(`예약 오픈 감지! 예약 화면으로 이동합니다 (일정 ${no})`);
-          try { sessionStorage.setItem(FLAG, no); } catch (e) { /* 저장 불가 시 자동 제출만 생략됨 */ }
-          location.href = `/mypage/reservation_ready/${no}`;
-          return;
-        }
-      } catch (e) { /* 네트워크 오류는 다음 주기에 재시도 */ }
-      await sleep(CONFIG.pollMs);
+        const t0 = Date.now();
+        const r = await fetch('/favicon.ico', { method: 'HEAD', cache: 'no-store' });
+        const t1 = Date.now();
+        const d = Date.parse(r.headers.get('date') || '');
+        if (!isNaN(d)) samples.push(d + 500 - (t0 + t1) / 2); // Date 헤더는 초 단위라 0.5초 보정
+      } catch (e) { /* 실패하면 PC 시계 사용 */ }
     }
+    if (samples.length) clockOffset = samples.sort((a, b) => a - b)[Math.floor(samples.length / 2)];
+  }
+  function offsetNote() {
+    return Math.abs(clockOffset) >= 1000
+      ? ` · 서버 시계 기준(PC가 ${Math.round(Math.abs(clockOffset) / 1000)}초 ${clockOffset > 0 ? '늦음' : '빠름'})` : '';
+  }
+
+  // ---------- 겹쳐 보내기: 응답이 늦어도 끊지 않고 기다리되, 5초 넘게 응답이 없으면 하나 더 보냄 (최대 3개) ----------
+  // probe(signal) → 열렸으면 결과, 아니면 null
+  async function pollOverlap(probe, dead, label) {
+    const MAX_INFLIGHT = 3, STAGGER_MS = 5000, GIVE_UP_MS = 60000;
+    let found = null, inflight = 0, sent = 0, lastSent = 0;
+    const fire = () => {
+      inflight++; sent++; lastSent = Date.now();
+      const ctl = new AbortController();
+      const kill = setTimeout(() => ctl.abort(), GIVE_UP_MS); // 60초 넘게 응답 없는 요청만 정리
+      probe(ctl.signal).then((r) => { if (r && !found) found = r; }).catch(() => {}).finally(() => { clearTimeout(kill); inflight--; });
+    };
+    while (!found && !dead()) {
+      const since = Date.now() - lastSent;
+      if ((inflight === 0 && since >= CONFIG.pollMs) || (inflight > 0 && inflight < MAX_INFLIGHT && since >= STAGGER_MS)) fire();
+      status(`${label} 오픈 대기 중… (${sent}회 확인)${inflight > 1 ? ` · 사이트 응답 지연, 응답 대기 ${inflight}개` : ''}`);
+      await sleep(100);
+    }
+    return dead() ? null : found;
+  }
+
+  // 화면이 깨졌을 때 다시 열기
+  function reloadSoon(why, beforeReload) {
+    let sec = 3;
+    stopped = false;
+    stopBtn.hidden = false;
+    const tick = () => {
+      if (stopped) return;
+      status(`${why} ${sec}초 뒤 다시 엽니다… (그만하려면 중지)`);
+      if (sec-- <= 0) { beforeReload?.(); location.reload(); return; }
+      setTimeout(tick, 1000);
+    };
+    tick();
   }
 
   // 2) 예약 화면: 인원 → 예약자 → 약관 동의 → (autoSubmit) 예약하기
@@ -294,8 +343,15 @@
     const scheduleNo = location.pathname.split('/').pop();
     let fromScript = false;
     try { fromScript = sessionStorage.getItem(FLAG) === scheduleNo; sessionStorage.removeItem(FLAG); } catch (e) { /* 무시 */ }
-    if (fromScript) fillReservation(true);
-    else if (!document.getElementById('btn_payment')) status('선상24에 로그인되어 있지 않습니다. 로그인한 뒤 이 화면을 새로고침하세요.');
+    const loggedOut = !document.getElementById('btn_payment') && document.querySelector('.btn_payment');
+    if (fromScript && document.getElementById('btn_payment')) fillReservation(true);
+    else if (fromScript && !loggedOut) {
+      // 혼잡으로 예약 화면이 제대로 안 열림 → 시작 표시를 다시 남기고 잠시 뒤 다시 열기 (다시 열리면 이어서 진행)
+      stopBtn.onclick = () => { stopped = true; stopBtn.hidden = true; status('다시 열기를 중지했습니다. 예약 화면을 직접 새로고침하면 "자동입력 시작" 버튼이 나옵니다.'); };
+      reloadSoon('예약 화면이 제대로 열리지 않았습니다.', () => { try { sessionStorage.setItem(FLAG, scheduleNo); } catch (e) { /* 무시 */ } });
+    }
+    else if (loggedOut) status('선상24에 로그인되어 있지 않습니다. 로그인한 뒤 이 화면을 새로고침하세요.');
+    else if (!document.getElementById('btn_payment')) status('예약 화면이 제대로 열리지 않았습니다. 새로고침(F5)하세요.');
     else {
       // 사이트의 "바로예약"으로 직접 연 화면: 버튼을 눌러야 입력 (설정을 먼저 확인·변경할 수 있게, 자동 신청은 하지 않음)
       status('이 예약 화면에서 자동입력을 하려면 "자동입력 시작"을 누르세요. 먼저 설정을 확인할 수 있습니다.');

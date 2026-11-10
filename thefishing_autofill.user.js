@@ -1,8 +1,9 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.0.0
-// @description  예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
+// @version      2.1.0
+// @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
+// @match        https://*.thefishing.kr/index.php*
 // @match        https://*.thefishing.kr/_core/module/reservation_boat_v5.2_seat1/popup.step1.php*
 // @match        https://*.thefishing.kr/_core/module/reservation_boat_v5.2_seat1/popu2.step1.php*
 // @grant        none
@@ -14,15 +15,22 @@
 (function () {
   'use strict';
 
+  // 예약 목록 페이지(index.php?mid=bk)와 예약 화면(step1)에서만 동작
+  const isList = location.pathname.endsWith('/index.php');
+  if (isList && new URLSearchParams(location.search).get('mid') !== 'bk') return;
+
   // ===================== 설정 항목 =====================
   // 값은 코드가 아니라 화면 위 "설정" 버튼에서 입력합니다. 이 사이트(주소)별로 브라우저에 저장되고, 스크립트가 업데이트돼도 유지됩니다.
   const STORE_KEY = 'fishingReserv.thefishing';
   const DEFAULTS = {
+    date: '', shipName: [],
     name: '', depositor: '', tel: ['', '', ''],
     people: 2, fishKeywords: [], seatGroups: [], fallbackAnySeat: true,
     openAt: '', startBeforeSec: 30, pollMs: 700, autoSubmit: false,
   };
   const FIELDS = [
+    { key: 'date', label: '출조일 (예약할 날짜)', type: 'date', help: '예약 목록 페이지에서 "예약 대기 시작"을 누를 때 사용합니다' },
+    { key: 'shipName', label: '배 이름', type: 'list', help: '배 이름 일부, 쉼표로 여러 개 가능 (예: 만석호). 하나라도 맞는 배 중 목록의 첫 번째 배를 고릅니다.' },
     { key: 'name', label: '예약자명', type: 'text', required: true },
     { key: 'depositor', label: '입금자명', type: 'text', help: '예약자와 다를 때만 입력' },
     { key: 'tel', label: '휴대폰 번호', type: 'phone', required: true, help: '예: 010-1234-5678' },
@@ -108,7 +116,7 @@
       .err:empty { display:none; }
       .btns { display:flex; gap:8px; justify-content:flex-end; }
     </style>
-    <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><button class="gear" type="button">설정</button></div>
+    <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><button class="start primary" type="button" hidden>예약 대기 시작</button><button class="gear" type="button">설정</button></div>
     <form class="panel" hidden></form>`;
   document.documentElement.appendChild(host);
   const $msg = ui.querySelector('.msg');
@@ -152,6 +160,38 @@
 
   const CONFIG = loadConfig();
   ui.querySelector('.auto').hidden = !CONFIG.autoSubmit;
+
+  // ===================== 예약 목록 페이지: 날짜·배 이름으로 예약 화면 찾기 =====================
+  // 배 이름 링크(…PA_N_UID=번호)는 예약 오픈 전에도 항상 있음
+  function shipLinks() {
+    const ships = new Map();
+    for (const a of document.querySelectorAll('a[href*="PA_N_UID="]')) {
+      const id = (a.getAttribute('href').match(/PA_N_UID=(\d+)/) || [])[1];
+      const name = a.textContent.replace(/\s+/g, ' ').trim();
+      if (id && name && !/^공지/.test(name) && !ships.has(id)) ships.set(id, name);
+    }
+    return [...ships].map(([id, name]) => ({ id, name }));
+  }
+  const SHIPS = isList ? shipLinks() : [];
+  if (SHIPS.length) FIELDS.find((f) => f.key === 'shipName').help += ` 이 사이트의 배: ${SHIPS.map((s) => s.name).join(', ')}`;
+
+  function startOnList() {
+    const names = [].concat(CONFIG.shipName || []).filter(Boolean);
+    const shipList = SHIPS.map((s) => s.name).join(', ');
+    if (!CONFIG.date || !names.length) {
+      status(`설정에서 출조일과 배 이름을 입력하면 여기서 예약 대기를 시작할 수 있습니다.`);
+      return;
+    }
+    const ship = SHIPS.find((s) => names.some((n) => s.name.includes(n)));
+    if (!ship) { status(`설정한 배 이름(${names.join(', ')})을 이 사이트에서 찾지 못했습니다. 이 사이트의 배: ${shipList}`); return; }
+    if (new Date(CONFIG.date + 'T23:59:59') < new Date()) { status(`출조일(${CONFIG.date})이 이미 지났습니다. 설정에서 날짜를 바꾸세요.`); return; }
+    const mod = (document.querySelector('[onclick*="popup.step1.php"]')?.getAttribute('onclick').match(/\/_core\/module\/([^/]+)\//) || [])[1] || 'reservation_boat_v5.2_seat1';
+    const url = `/_core/module/${mod}/popup.step1.php?date=${CONFIG.date.replace(/-/g, '')}&PA_N_UID=${ship.id}`;
+    status(`${CONFIG.date} ${ship.name}: 준비되면 "예약 대기 시작"을 누르세요. 예약 화면으로 이동해 오픈을 기다립니다.`);
+    const btn = ui.querySelector('.start');
+    btn.hidden = false;
+    btn.onclick = () => { location.href = url; };
+  }
 
   // ===================== 예약 자동입력 =====================
   const q = new URLSearchParams(location.search);
@@ -251,7 +291,8 @@
     return;
   }
 
-  if (!fishRadios().length) waitForOpen();
+  if (isList) startOnList();
+  else if (!fishRadios().length) waitForOpen();
   else if (!q.get('PS_N_UID')) selectFish();
   else fillForm();
 })();

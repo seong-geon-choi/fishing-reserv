@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.4.0.1110-233044
+// @version      2.4.0.1110-233135
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -171,6 +171,7 @@
       if (!m || +m[1] !== M || +m[2] !== D) continue;
       const row = td.closest('tr');
       for (const btn of row.querySelectorAll('button.btn_user_reservation[data-schedule_no]')) {
+      if (!+btn.dataset.schedule_no) continue; // 일정번호 0 = 아직 일정이 없는 자리 (열림 아님)
         const ship = btn.closest('td.ship_info')?.textContent || '';
         if (!shipNames.length || shipNames.some((s) => ship.includes(s))) return btn.dataset.schedule_no;
       }
@@ -181,6 +182,7 @@
   // 하루치 일정 응답에서 "바로예약" 일정번호 찾기 (날짜 칸 없이 배별 줄만 옴)
   function findInDay(doc) {
     for (const btn of doc.querySelectorAll('button.btn_user_reservation[data-schedule_no]')) {
+      if (!+btn.dataset.schedule_no) continue; // 일정번호 0 = 아직 일정이 없는 자리 (열림 아님)
       const ship = btn.closest('td.ship_info')?.textContent || '';
       if (!shipNames.length || shipNames.some((s) => ship.includes(s))) return btn.dataset.schedule_no;
     }

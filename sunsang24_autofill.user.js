@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.3.0.20261110.225035
+// @version      2.3.1.1110-225502
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -116,10 +116,10 @@
 
   function openPanel(note) {
     const c = loadConfig();
-    // 버전 "2.5.0.20261110.213045" → "버전 2.5.0 · 수정 2026-11-10 21:30:45"
+    // 버전 "2.3.1.1110-225502" (기본 버전.월일-시분초) → "버전 2.3.1 · 수정 11-10 22:55:02"
     const raw = typeof GM_info !== 'undefined' ? GM_info.script.version : '';
-    const vm = raw.match(/^(d+.d+.d+).(d{4})(d{2})(d{2})(?:.(d{2})(d{2})(d{2}))?$/);
-    const ver = !raw ? '' : vm ? `버전 ${vm[1]} · 수정 ${vm[2]}-${vm[3]}-${vm[4]}${vm[5] ? ` ${vm[5]}:${vm[6]}:${vm[7]}` : ''}` : `버전 ${raw}`;
+    const vm = raw.match(/^(\d+\.\d+\.\d+)\.(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/);
+    const ver = !raw ? '' : vm ? `버전 ${vm[1]} · 수정 ${vm[2]}-${vm[3]} ${vm[4]}:${vm[5]}:${vm[6]}` : `버전 ${raw}`;
     panel.innerHTML = `<h2>예약 자동입력 설정 <span class="ver">${ver}</span></h2>
       <p class="sub">이 사이트(${location.hostname})에 저장됩니다. 다른 업체 사이트에서는 따로 입력하세요.</p>
       <p class="err">${note || ''}</p>`;

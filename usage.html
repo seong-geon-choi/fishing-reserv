@@ -138,6 +138,18 @@ details > div { padding: 0 14px 14px; display: flex; flex-direction: column; gap
 .copyline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .copyline code { flex: 1; min-width: 0; }
 footer { color: var(--muted); font-size: .85rem; }
+
+/* 좌석 시뮬레이터 강조 상자 */
+.sim-cta { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; padding: 18px 20px; border-radius: 12px;
+  background: var(--accent-soft); border: 2px solid var(--accent); }
+.sim-text { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.sim-title { font-size: 1.15rem; font-weight: 700; color: var(--accent); }
+.btn.sim-btn { background: var(--orange); border-color: var(--orange); color: #fff; font-size: 1.05rem; padding: 14px 22px; box-shadow: 0 3px 0 rgba(0,0,0,.18); }
+.btn.sim-btn:hover { filter: brightness(1.06); }
+:root[data-theme="dark"] .btn.sim-btn { color: #1a0d05; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.sim-btn { color: #1a0d05; } }
+@media (max-width: 520px) { .btn.sim-btn { width: 100%; } }
+.toc a.sim-link { color: var(--orange); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -148,6 +160,7 @@ footer { color: var(--muted); font-size: .85rem; }
     <a href="#tm"><span class="n">1</span>Tampermonkey 설치</a>
     <a href="#script"><span class="n">2</span>예약 스크립트 설치</a>
     <a href="#seats"><span class="n">3</span>좌석 정하기</a>
+    <a href="seat_simulator.html" class="sim-link"><span class="n">↗</span>좌석 시뮬레이터</a>
     <a href="#settings"><span class="n">4</span>설정 입력</a>
     <a href="#practice"><span class="n">5</span>연습하기</a>
     <a href="#day"><span class="n">6</span>오픈 당일</a>
@@ -252,8 +265,15 @@ footer { color: var(--muted); font-size: .85rem; }
       <p class="note">같이 앉을 자리는 <b>한 줄에 묶어서</b> 적으세요. <code>6</code> / <code>7</code> / <code>8</code>처럼 한 줄에 한 자리씩 적으면, 한 자리짜리 줄은 인원을 못 채워 그룹으로 선택되지 않습니다.</p>
 
       <h3>방법 A. 좌석 시뮬레이터로 미리 연습 (추천)</h3>
+      <div class="sim-cta">
+        <div class="sim-text">
+          <p class="sim-title">좌석 시뮬레이터</p>
+          <p>배 그림에서 이미 예약된 자리를 찍어 보며, 내 좌석 그룹으로 <b>어떤 자리가 골라지는지</b> 미리 확인합니다. 결과를 복사해 설정 창에 붙여넣으면 됩니다.</p>
+        </div>
+        <a class="btn sim-btn" href="seat_simulator.html">좌석 시뮬레이터 열기 →</a>
+      </div>
       <ol>
-        <li><a class="btn small" href="seat_simulator.html">좌석 시뮬레이터 열기</a></li>
+        <li>위 <b>좌석 시뮬레이터 열기</b>를 누릅니다.</li>
         <li>위쪽에서 배(만석호 또는 나대세호)를 고릅니다.</li>
         <li><b>예약 인원</b>과 <b>좌석 그룹</b>을 입력합니다.</li>
         <li>배 그림의 좌석을 눌러 "이미 예약된 자리"로 바꿔 보면서, 주황색으로 표시되는 결과가 원하는 대로인지 확인합니다.</li>

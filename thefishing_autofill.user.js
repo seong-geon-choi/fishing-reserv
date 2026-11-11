@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.7.2.1111-104443
+// @version      2.7.3.1111-105234
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -167,6 +167,9 @@
       .pp-group .pp-del { margin-left:auto; padding:2px 6px; font-size:12px; }
       .pp-chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; min-height:22px; }
       .pp-chip { display:inline-flex; align-items:center; gap:3px; border-radius:11px; padding:1px 4px 1px 8px; color:#fff; font-weight:700; font-size:12px; }
+      .pp-chip { cursor:grab; touch-action:none; user-select:none; }
+      .pp-chip.dragging { opacity:.55; outline:2px dashed #1f2933; cursor:grabbing; }
+      .pp-ord { font-style:normal; font-size:10px; font-weight:700; background:rgba(255,255,255,.3); border-radius:6px; padding:0 4px; }
       .pp-chip button { border:0; background:rgba(255,255,255,.25); color:#fff; border-radius:50%; width:16px; height:16px; padding:0; font-size:11px; line-height:16px; }
       .pp-empty { color:#9aa5b1; font-size:12px; }
       .pp-warn { color:#b45309; font-size:11px; margin-top:3px; }
@@ -211,6 +214,7 @@
           <ol class="pp-steps">
             <li>같이 앉고 싶은 좌석을 <b>원하는 순서대로</b> 누르세요. 다시 누르면 지금 그룹에서 빠집니다.</li>
             <li>다른 후보가 있으면 <b>+ 다음 후보 그룹 추가</b> 후 이어서 고르세요. <b>같은 좌석을 여러 그룹에 넣어도 됩니다.</b></li>
+            <li>순서를 바꾸려면 그룹 안의 <b>번호 칩을 끌어서</b> 원하는 위치에 놓으세요.</li>
             <li>다 고르면 <b>완료</b>를 누르세요.</li>
           </ol>
           <p class="pp-hint"></p>
@@ -461,7 +465,7 @@
     pp.querySelector('.pp-hint').textContent = people ? `예약 인원 ${people}명: 그룹마다 ${people}자리 이상 고르면 그 그룹 안에서 자리를 잡습니다.` : '';
     pp.querySelector('.pp-groups').innerHTML = pick.groups.map((g, i) => {
       const chips = g.length
-        ? g.map((n) => `<span class="pp-chip" style="background:${gColor(i)}">${n}<button type="button" data-g="${i}" data-n="${n}" title="${n}번 빼기">×</button></span>`).join('')
+        ? g.map((n, k) => `<span class="pp-chip" data-g="${i}" data-n="${n}" style="background:${gColor(i)}" title="끌어서 순서 바꾸기"><i class="pp-ord">${k + 1}</i>${n}<button type="button" data-g="${i}" data-n="${n}" title="${n}번 빼기">×</button></span>`).join('')
         : '<span class="pp-empty">배 그림에서 좌석을 누르세요</span>';
       const warn = g.length && people && g.length < people ? `<div class="pp-warn">인원 ${people}명보다 적어서 이 그룹만으로는 자리를 다 잡지 못합니다</div>` : '';
       return `<div class="pp-group ${i === pick.active ? 'active' : ''}" data-g="${i}" style="border-color:${i === pick.active ? gColor(i) : ''}">
@@ -504,8 +508,44 @@
   });
 
   // 창 안의 클릭: 날짜 / 그룹 선택 / 좌석 빼기 / 그룹 삭제
+  // 번호 칩을 끌어서 그룹 안 순서 바꾸기 (마우스·터치 모두). 같은 그룹 안에서만 옮김
+  let chipDrag = null;
+  let suppressClickUntil = 0;
+  pp.addEventListener('pointerdown', (e) => {
+    const chip = e.target.closest('.pp-chip');
+    if (!chip || e.target.closest('button') || !pick) return;
+    e.preventDefault();
+    chipDrag = { chip, box: chip.parentElement, g: +chip.dataset.g, moved: false, x: e.clientX, y: e.clientY };
+    chip.setPointerCapture(e.pointerId);
+  });
+  pp.addEventListener('pointermove', (e) => {
+    if (!chipDrag) return;
+    if (!chipDrag.moved && Math.hypot(e.clientX - chipDrag.x, e.clientY - chipDrag.y) < 4) return; // 살짝 누른 건 끌기로 보지 않음
+    chipDrag.moved = true;
+    chipDrag.chip.classList.add('dragging');
+    const over = ui.elementFromPoint(e.clientX, e.clientY)?.closest('.pp-chip');
+    if (!over || over === chipDrag.chip || over.parentElement !== chipDrag.box) return;
+    const r = over.getBoundingClientRect();
+    const after = e.clientY > r.bottom || (e.clientY >= r.top && e.clientX > r.left + r.width / 2);
+    chipDrag.box.insertBefore(chipDrag.chip, after ? over.nextSibling : over);
+    // 끄는 동안에도 칩의 순서 번호를 갱신
+    chipDrag.box.querySelectorAll('.pp-ord').forEach((o, k) => { o.textContent = k + 1; });
+  });
+  const endChipDrag = () => {
+    if (!chipDrag) return;
+    const d = chipDrag;
+    chipDrag = null;
+    d.chip.classList.remove('dragging');
+    if (!d.moved) return;
+    pick.groups[d.g] = [...d.box.querySelectorAll('.pp-chip')].map((c) => +c.dataset.n);
+    suppressClickUntil = Date.now() + 300; // 끈 직후 따라오는 클릭(그룹 선택)은 무시
+    renderPick();
+  };
+  pp.addEventListener('pointerup', endChipDrag);
+  pp.addEventListener('pointercancel', endChipDrag);
+
   pp.addEventListener('click', (e) => {
-    if (!pick) return;
+    if (!pick || Date.now() < suppressClickUntil) return;
     const dchip = e.target.closest('.pp-dchip');
     const chipX = e.target.closest('.pp-chip button');
     const del = e.target.closest('.pp-del');

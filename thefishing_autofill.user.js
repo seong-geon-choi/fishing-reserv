@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.6.3.1111-093803
+// @version      2.6.3.1111-094105
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -138,7 +138,8 @@
         background:#fff; color:#1f2933; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.28); padding:0 14px 12px; font-size:13px; font-weight:400; }
       .pickpanel[hidden] { display:none; }
       @media (max-width: 640px) { .pickpanel { top:auto; bottom:8px; right:8px; left:8px; width:auto; max-height:45vh; } }
-      .pp-head { margin:0 -14px 8px; padding:9px 14px; background:#1f2933; color:#fff; font-weight:700; border-radius:10px 10px 0 0; }
+      .pp-head { margin:0 -14px 8px; padding:9px 14px; background:#1f2933; color:#fff; font-weight:700; border-radius:10px 10px 0 0; cursor:move; user-select:none; touch-action:none; display:flex; }
+      .pp-head small { margin-left:auto; color:#9aa5b1; font-weight:400; }
       .pp-steps { margin:0 0 6px; padding-left:18px; line-height:1.5; }
       .pp-hint { margin:0 0 8px; color:#52606d; font-size:12px; }
       .pp-groups { display:flex; flex-direction:column; gap:6px; margin-bottom:8px; }
@@ -185,7 +186,7 @@
     <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><button class="start primary" type="button" hidden>예약 대기 시작</button><span class="ask" hidden><button class="wait1" type="button">1분 더 기다리기</button><button class="cut" type="button">끊고 새로 요청</button></span><button class="stop" type="button" hidden>중지</button><button class="gear" type="button">설정</button></div>
     <form class="panel" hidden></form>
     <div class="pickpanel" hidden>
-      <div class="pp-head">배 그림에서 좌석 고르기</div>
+      <div class="pp-head">배 그림에서 좌석 고르기<small>⠿ 끌어서 이동</small></div>
       <ol class="pp-steps">
         <li>같이 앉고 싶은 좌석을 <b>원하는 순서대로</b> 누르세요.</li>
         <li>다른 후보 자리가 있으면 <b>+ 다음 후보 그룹 추가</b>를 누르고 이어서 고르세요.</li>
@@ -418,6 +419,24 @@
     status(apply ? '좌석 그룹을 설정 창에 넣었습니다. "저장하고 새로고침"을 눌러야 저장됩니다.' : '좌석 고르기를 취소했습니다.');
     panel.hidden = false;
   }
+  // 도우미 창도 제목줄을 끌어서 옮길 수 있게 (배 그림을 가리면 옆으로)
+  pp.querySelector('.pp-head').addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    const head = e.currentTarget;
+    const r = pp.getBoundingClientRect();
+    const dx = e.clientX - r.left, dy = e.clientY - r.top;
+    head.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      pp.style.left = Math.min(Math.max(0, ev.clientX - dx), window.innerWidth - pp.offsetWidth) + 'px';
+      pp.style.top = Math.min(Math.max(0, ev.clientY - dy), window.innerHeight - 40) + 'px';
+      pp.style.right = 'auto';
+      pp.style.bottom = 'auto';
+    };
+    const up = () => { head.removeEventListener('pointermove', move); head.removeEventListener('pointerup', up); head.removeEventListener('pointercancel', up); };
+    head.addEventListener('pointermove', move);
+    head.addEventListener('pointerup', up);
+    head.addEventListener('pointercancel', up);
+  });
   pp.querySelector('.pp-cancel').onclick = () => endPick(false);
   pp.querySelector('.pp-done').onclick = () => endPick(true);
 

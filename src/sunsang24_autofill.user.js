@@ -117,7 +117,7 @@
 //@@include panel_drag.js
 
   const CONFIG = loadConfig();
-  ui.querySelector('.auto').hidden = !CONFIG.autoSubmit;
+//@@include auto_flag.js
 
   // ===================== 예약 자동입력 =====================
   const [Y, M, D] = CONFIG.date.split('-').map(Number);

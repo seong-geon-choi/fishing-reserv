@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.9.1111-162103
+// @version      2.5.10.1111-162317
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -116,6 +116,13 @@
       .ask[hidden] { display:none; }
       .toasts { position:fixed; left:50%; transform:translateX(-50%); width:min(560px, calc(100vw - 16px)); display:flex; flex-direction:column; gap:6px; pointer-events:none; }
       .toast { background:#1f2933; color:#fff; border-left:5px solid #ffe14d; border-radius:8px; padding:10px 14px; font-size:14px; font-weight:700; box-shadow:0 6px 20px rgba(0,0,0,.3); transition:opacity .4s; }
+      /* 자동 신청이 켜져 있을 때: 화면 전체 빨간 테두리 깜빡임 (클릭은 막지 않음) */
+      .autoframe { position:fixed; inset:0; border:8px solid #e03131; pointer-events:none; animation:autoblink 1s steps(1) infinite; }
+      .autoframe[hidden] { display:none; }
+      .auto { animation:autoblink-badge 1s steps(1) infinite; }
+      @keyframes autoblink { 50% { border-color:rgba(224, 49, 49, .15); } }
+      @keyframes autoblink-badge { 50% { background:#7a1515; } }
+      @media (prefers-reduced-motion: reduce) { .autoframe, .auto { animation:none; } }
       /* 떠 있는 설정 창 + 한 화면 격자 배치 */
       .panel { position:fixed; margin:0; max-width:none; width:min(820px, calc(100vw - 16px)); max-height:calc(100vh - 16px); border-radius:10px; padding:0 16px 14px; }
       .phead { display:flex; align-items:center; gap:8px; margin:0 -16px 8px; padding:9px 12px 9px 16px; background:#1f2933; color:#fff;
@@ -145,6 +152,7 @@
       .seatimg .help { margin-top:4px; }
     </style>
     <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><button class="start primary" type="button" hidden>예약 대기 시작</button><span class="ask" hidden><button class="wait1" type="button">1분 더 기다리기</button><button class="cut" type="button">끊고 새로 요청</button></span><button class="stop" type="button" hidden>중지</button><button class="gear" type="button">설정</button></div>
+    <div class="autoframe" hidden></div>
     <form class="panel" hidden></form>`;
   document.documentElement.appendChild(host);
   // 상태 바가 사이트 위쪽 메뉴를 가리지 않게, 바 높이만큼 페이지를 아래로 밀기
@@ -308,7 +316,9 @@
   ui.querySelector('.gear').onclick = () => (panel.hidden ? openPanel() : (panel.hidden = true));
 
   const CONFIG = loadConfig();
+  // 자동 신청이 켜져 있으면 눈에 띄게: 상태 바의 "자동 신청 켜짐" + 화면 전체 빨간 테두리 깜빡임
   ui.querySelector('.auto').hidden = !CONFIG.autoSubmit;
+  ui.querySelector('.autoframe').hidden = !CONFIG.autoSubmit;
 
   // ===================== 예약 자동입력 =====================
   const [Y, M, D] = CONFIG.date.split('-').map(Number);

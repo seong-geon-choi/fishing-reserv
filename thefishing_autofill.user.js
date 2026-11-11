@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.9.1111-162103
+// @version      2.8.10.1111-162317
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -143,6 +143,13 @@
       .ask[hidden] { display:none; }
       .toasts { position:fixed; left:50%; transform:translateX(-50%); width:min(560px, calc(100vw - 16px)); display:flex; flex-direction:column; gap:6px; pointer-events:none; }
       .toast { background:#1f2933; color:#fff; border-left:5px solid #ffe14d; border-radius:8px; padding:10px 14px; font-size:14px; font-weight:700; box-shadow:0 6px 20px rgba(0,0,0,.3); transition:opacity .4s; }
+      /* 자동 신청이 켜져 있을 때: 화면 전체 빨간 테두리 깜빡임 (클릭은 막지 않음) */
+      .autoframe { position:fixed; inset:0; border:8px solid #e03131; pointer-events:none; animation:autoblink 1s steps(1) infinite; }
+      .autoframe[hidden] { display:none; }
+      .auto { animation:autoblink-badge 1s steps(1) infinite; }
+      @keyframes autoblink { 50% { border-color:rgba(224, 49, 49, .15); } }
+      @keyframes autoblink-badge { 50% { background:#7a1515; } }
+      @media (prefers-reduced-motion: reduce) { .autoframe, .auto { animation:none; } }
       h3.shiphead { margin:18px 0 2px; padding-top:12px; border-top:1px solid #d5dce2; font-size:15px; color:#1c6fb8; }
       .shipnote { margin:0 0 10px; }
       .pickrow { margin:-6px 0 12px; }
@@ -214,6 +221,7 @@
       .pp-btns { display:flex; gap:8px; justify-content:flex-end; }
     </style>
     <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><button class="start primary" type="button" hidden>예약 대기 시작</button><span class="ask" hidden><button class="wait1" type="button">1분 더 기다리기</button><button class="cut" type="button">끊고 새로 요청</button></span><button class="stop" type="button" hidden>중지</button><button class="gear" type="button">설정</button></div>
+    <div class="autoframe" hidden></div>
     <form class="panel" hidden></form>
     <div class="pickpanel" hidden>
       <div class="pp-head"><span class="pp-title">배 그림에서 좌석 고르기</span><small>⠿ 끌어서 이동</small><button type="button" class="pp-x" aria-label="닫기">×</button></div>
@@ -682,7 +690,9 @@
 
   // 예약 화면에서는 이 배의 배별 설정(낚시종류·좌석)을 적용
   const CONFIG = isStep1 ? forShip(loadConfig(), new URLSearchParams(location.search).get('PA_N_UID')) : loadConfig();
+  // 자동 신청이 켜져 있으면 눈에 띄게: 상태 바의 "자동 신청 켜짐" + 화면 전체 빨간 테두리 깜빡임
   ui.querySelector('.auto').hidden = !CONFIG.autoSubmit;
+  ui.querySelector('.autoframe').hidden = !CONFIG.autoSubmit;
 
   // ===================== 예약 목록 페이지: 날짜·배 이름으로 예약 화면 찾기 =====================
   // 배 이름 링크(…PA_N_UID=번호)는 예약 오픈 전에도 항상 있음

@@ -491,7 +491,7 @@
 
   // 예약 화면에서는 이 배의 배별 설정(낚시종류·좌석)을 적용
   const CONFIG = isStep1 ? forShip(loadConfig(), new URLSearchParams(location.search).get('PA_N_UID')) : loadConfig();
-  ui.querySelector('.auto').hidden = !CONFIG.autoSubmit;
+//@@include auto_flag.js
 
   // ===================== 예약 목록 페이지: 날짜·배 이름으로 예약 화면 찾기 =====================
   // 배 이름 링크(…PA_N_UID=번호)는 예약 오픈 전에도 항상 있음

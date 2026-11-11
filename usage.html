@@ -183,7 +183,7 @@ footer { color: var(--muted); font-size: .85rem; }
           <thead><tr><th>예약 사이트</th><th>배 (예)</th><th>좌석 지정</th><th>로그인</th></tr></thead>
           <tbody>
             <tr><td><b>더피싱</b></td><td>만석호, 나대세호, 팀루피호, 하이피싱호</td><td>만석호·나대세호는 좌석 지정, 나머지는 없음</td><td>필요 없음</td></tr>
-            <tr><td><b>선상24</b></td><td>오천 빅보스호, 태안 가가호</td><td>없음 (선장이 배정)</td><td><b>필요</b></td></tr>
+            <tr><td><b>선상24</b></td><td>오천 빅보스호, 태안 가가호, 뉴항구호 등</td><td>빅보스호·가가호는 없음(선장이 배정), 뉴항구호처럼 좌석 선택이 있는 배도 있음</td><td><b>필요</b></td></tr>
           </tbody>
         </table>
       </div>
@@ -354,6 +354,7 @@ footer { color: var(--muted); font-size: .85rem; }
             <thead><tr><th>배</th><th>일정 페이지 (2026년 12월 예)</th></tr></thead>
             <tbody>
               <tr><td>빅보스호</td><td><a href="https://bigboss24.sunsang24.com/ship/schedule_fleet/202612" target="_blank" rel="noopener">bigboss24.sunsang24.com/ship/schedule_fleet/202612</a></td></tr>
+              <tr><td>뉴항구호·뉴항구1호·레전드호</td><td><a href="https://daebak.sunsang24.com/ship/schedule_fleet/202612" target="_blank" rel="noopener">daebak.sunsang24.com/ship/schedule_fleet/202612</a></td></tr>
               <tr><td>가가호</td><td><a href="https://gagaho.sunsang24.com/ship/schedule_fleet/202612" target="_blank" rel="noopener">gagaho.sunsang24.com/ship/schedule_fleet/202612</a></td></tr>
             </tbody>
           </table></div>
@@ -361,6 +362,8 @@ footer { color: var(--muted); font-size: .85rem; }
         <li><b class="ui">설정</b>에서 <b>출조일</b>, <b>배 이름</b>, <b>예약 인원</b>, <b>예약 오픈 시각</b>을 입력하고 저장합니다.
           <ul>
             <li>가가호 사이트에는 날짜마다 배가 여러 척 나옵니다. <b>배 이름을 꼭</b> 적으세요(예: <code>가가호</code>).</li>
+            <li><b>좌석 선택이 있는 배</b>(예: 뉴항구호)는 설정의 <b>좌석 그룹</b>을 적어 두세요. 예약 화면의 "자리 선택" 칸에는 지금 빈 좌석만 나오고, 스크립트가 그 중에서 좌석 그룹 규칙(<a href="#seats">3단계</a>와 같음)으로 <b>인원수만큼</b> 골라 체크합니다. 번호는 예약 화면의 <b>자리배치도 그림</b>을 보고 적으세요(선상24는 배치도가 그림이라 "배 그림에서 좌석 고르기"는 쓸 수 없습니다).</li>
+            <li>배 이름은 <b>정확히</b> 적으세요. 예를 들어 <code>뉴항구</code>라고만 적으면 뉴항구호와 뉴항구1호가 모두 맞아서 화면에서 먼저 나오는 배가 골라집니다. <code>뉴항구호</code>처럼 전체 이름을 적으세요.</li>
             <li><b>예약자명도 적어 두세요.</b> 여명호처럼 "선택출항"(정해진 일정 없이 어종을 골라 예약하는 방식)인 배는 예약 화면에 예약자명이 미리 채워지지 않습니다.</li>
           </ul>
         </li>

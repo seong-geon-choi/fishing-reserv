@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.0.1111-125437
+// @version      2.5.0.1111-125600
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -433,7 +433,7 @@
     const notes = [];
     if (people !== CONFIG.people) notes.push(`인원이 ${CONFIG.people}명이 아니라 ${people}명입니다(최대 인원 제한)`);
     if (seatsShort) notes.push(`좌석이 ${seatPicks.length}석만 골라졌습니다. 인원(${people}명)만큼 직접 골라 주세요`);
-    const summary = `인원 ${people}명${seatBoxes.length ? `, 좌석 ${seatPicks.join(', ') || '없음'}번` : ''}, 예약자 ${document.querySelector('input[name=name]')?.value || '(비어 있음)'}`;
+    const summary = `인원 ${people}명${seatBoxes.length ? (seatPicks.length ? `, 좌석 ${seatPicks.join(', ')}번` : ', 좌석 없음') : ''}, 예약자 ${document.querySelector('input[name=name]')?.value || '(비어 있음)'}`;
 
     if (!CONFIG.autoSubmit || !fromScript || seatsShort || people !== CONFIG.people) {
       const why = CONFIG.autoSubmit && !fromScript ? ' (직접 연 화면이라 자동 신청은 하지 않습니다)' : '';

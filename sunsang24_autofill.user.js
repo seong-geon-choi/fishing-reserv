@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.4.2.1111-092230
+// @version      2.5.0.1111-125437
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -20,6 +20,7 @@
   const STORE_KEY = 'fishingReserv.sunsang24';
   const DEFAULTS = {
     date: '', shipName: [], people: 2, name: '', depositor: '', phone: ['', '', ''],
+    seatGroups: [], fallbackAnySeat: true,
     openAt: '', startBeforeSec: 30, pollMs: 1000, autoSubmit: false,
   };
   const FIELDS = [
@@ -29,6 +30,8 @@
     { key: 'name', w: 1, label: '예약자명', type: 'text', help: '비우면 화면 값 사용' },
     { key: 'depositor', w: 1, label: '입금자명', type: 'text', help: '칸이 있는 배만' },
     { key: 'phone', w: 1, label: '휴대폰 번호', type: 'phone', help: '화면이 비었을 때만' },
+    { key: 'seatGroups', w: 2, label: '좌석 그룹 (좌석 선택이 있는 배만)', type: 'groups', help: '한 줄에 그룹 하나 (예: 2, 3, 4), 위쪽이 우선. 예약 화면의 자리배치도 그림 번호를 보고 적으세요. 좌석 선택이 없는 배에서는 무시' },
+    { key: 'fallbackAnySeat', w: 2, label: '그룹으로 인원을 못 채우면 남은 좌석으로 채우기', type: 'check' },
     { key: 'openAt', w: 2, label: '예약 오픈 시각', type: 'datetime', help: '비우면 시작하자마자 확인' },
     { key: 'startBeforeSec', w: 1, label: '몇 초 전부터 확인', type: 'number', min: 5, max: 600 },
     { key: 'pollMs', w: 1, label: '확인 간격(ms)', type: 'number', min: 500, max: 10000, help: '1000 이상 권장' },
@@ -392,6 +395,24 @@
       if (count() === before) break;
     }
 
+    // 좌석 선택이 있는 배(예: 뉴항구호): 체크박스 목록 = 지금 빈 좌석. 좌석 그룹 규칙으로 인원수만큼 체크.
+    // 사이트는 "체크 수 > 인원"이면 경고창을 띄우므로 인원을 먼저 맞춘 뒤, 인원수까지만 체크함
+    const seatBoxes = [...document.querySelectorAll('input[name="select_seat_nos[]"]')];
+    let seatPicks = [];
+    if (seatBoxes.length) {
+      const boxOf = (n) => seatBoxes.find((b) => +b.value === n && !b.disabled);
+      const want = count();
+      const group = CONFIG.seatGroups.find((g) => g.filter(boxOf).length >= want);
+      seatPicks = (group || [...new Set(CONFIG.seatGroups.flat())]).filter(boxOf).slice(0, want);
+      if (seatPicks.length < want && CONFIG.fallbackAnySeat) {
+        const others = seatBoxes.filter((b) => !b.disabled && !seatPicks.includes(+b.value)).map((b) => +b.value);
+        seatPicks = seatPicks.concat(others.slice(0, want - seatPicks.length));
+      }
+      seatBoxes.forEach((b) => { if (b.checked) b.click(); }); // 이미 체크된 것은 해제 후 다시
+      for (const n of seatPicks) { boxOf(n).click(); await sleep(30); }
+      seatPicks = seatBoxes.filter((b) => b.checked).map((b) => +b.value);
+    }
+
     const setVal = (sel, v) => { const el = document.querySelector(sel); if (el && v) el.value = v; };
     if (CONFIG.name) setVal('input[name=name]', CONFIG.name);
     if (CONFIG.depositor) setVal('input[name=deposit_name]', CONFIG.depositor);
@@ -408,13 +429,13 @@
     btn.style.outline = '4px solid red';
 
     const people = count();
-    const seatBoxes = document.querySelectorAll('input[name="select_seat_nos[]"]').length;
+    const seatsShort = seatBoxes.length > 0 && seatPicks.length !== people;
     const notes = [];
     if (people !== CONFIG.people) notes.push(`인원이 ${CONFIG.people}명이 아니라 ${people}명입니다(최대 인원 제한)`);
-    if (seatBoxes) notes.push('이 배는 좌석을 직접 골라야 합니다');
-    const summary = `인원 ${people}명, 예약자 ${document.querySelector('input[name=name]')?.value || '(비어 있음)'}`;
+    if (seatsShort) notes.push(`좌석이 ${seatPicks.length}석만 골라졌습니다. 인원(${people}명)만큼 직접 골라 주세요`);
+    const summary = `인원 ${people}명${seatBoxes.length ? `, 좌석 ${seatPicks.join(', ') || '없음'}번` : ''}, 예약자 ${document.querySelector('input[name=name]')?.value || '(비어 있음)'}`;
 
-    if (!CONFIG.autoSubmit || !fromScript || seatBoxes || people !== CONFIG.people) {
+    if (!CONFIG.autoSubmit || !fromScript || seatsShort || people !== CONFIG.people) {
       const why = CONFIG.autoSubmit && !fromScript ? ' (직접 연 화면이라 자동 신청은 하지 않습니다)' : '';
       status(`입력 완료: ${summary}. ${notes.join(', ')}${notes.length ? '. ' : ''}내용을 확인하고 빨간 테두리 "예약하기"를 누르세요.${why}`);
       return;

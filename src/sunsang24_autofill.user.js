@@ -214,6 +214,19 @@
 
 //@@include seats.js
 
+  // 이 예약 화면에서 한 번에 예약할 수 있는 최대 인원. 사이트의 + 버튼이 확인하는 세 값 중 가장 작은 값
+  // (남은 승선 인원, 1인 최대 예약 인원, 가격 옵션의 최대 인원. 뒤의 둘은 0이면 제한 없음)
+  function maxPeople() {
+    const sc = (window.data && window.data.schedule) || {};
+    const plus = document.querySelector('a.plus');
+    const opt = (window.jQuery && plus && window.jQuery(plus).parent().data('price_option')) || {};
+    const limits = [];
+    if (sc.remain_embarkation_num != null && sc.remain_embarkation_num !== '') limits.push(Math.max(0, +sc.remain_embarkation_num));
+    if (+sc.person_per_reservation > 0) limits.push(+sc.person_per_reservation);
+    if (+opt.pmax > 0) limits.push(+opt.pmax);
+    return limits.length ? Math.min(...limits) : Infinity;
+  }
+
   // 2) 예약 화면: 인원 → 예약자 → 약관 동의 → (autoSubmit) 예약하기
   // fromScript: 일정 페이지에서 "예약 대기 시작"으로 들어온 경우만 true (자동 신청은 이때만)
   async function fillReservation(fromScript) {
@@ -223,7 +236,7 @@
       return;
     }
 
-    // 인원: +/− 버튼을 눌러 맞춤 (최대 인원에 막히면 멈춤)
+    // 인원: +/− 버튼을 눌러 맞춤. 최대 인원을 넘겨 누르면 사이트가 경고창을 띄워 멈추므로, 최대 인원을 먼저 알아내 그 이상은 누르지 않음
     const countEl = document.querySelector('.people_count');
     const count = () => parseInt(countEl?.textContent, 10) || 0;
     const setPeople = async (target) => {
@@ -234,20 +247,23 @@
         if (count() === before) break;
       }
     };
-    await setPeople(CONFIG.people);
-    const cappedTo = count() !== CONFIG.people ? count() : 0; // 배의 최대 인원 제한에 막힘
+    const allowed = Math.min(CONFIG.people, maxPeople());
+    // 예약 가능한 인원이 설정 인원보다 적으면 좌석이 모자랄 때와 같은 규칙("남은 좌석만큼만 예약"·최소 인원)
+    const peopleOk = seatShortage(allowed, CONFIG.people, '인원');
+    if (allowed > 0) await setPeople(allowed);
+    const mismatch = allowed > 0 && count() !== allowed; // 그래도 맞지 않음 (예상 못 한 제한)
 
     // 좌석 선택이 있는 배(예: 뉴항구호): 체크박스 목록 = 지금 빈 좌석. 좌석 그룹 규칙으로 인원수만큼 체크.
     // 사이트는 "체크 수 > 인원"이면 경고창을 띄우므로 인원을 먼저 맞춘 뒤, 인원수까지만 체크함
     const seatBoxes = [...document.querySelectorAll('input[name="select_seat_nos[]"]')];
     let seatPicks = [];
-    let short = false; // 좌석이 모자라 자동 신청하지 않음
+    let short = !peopleOk; // 인원·좌석이 모자라 자동 신청하지 않음
     if (seatBoxes.length) {
       const boxOf = (n) => seatBoxes.find((b) => +b.value === n && !b.disabled);
       const want = count();
       seatPicks = pickSeats(seatBoxes.filter((b) => !b.disabled).map((b) => +b.value), want);
-      const n = seatShortage(seatPicks.length, want);
-      short = !n;
+      const n = short ? want : seatShortage(seatPicks.length, want); // 인원에서 이미 멈췄으면 안내를 겹쳐 띄우지 않음
+      if (!n) short = true;
       if (n && n < want) await setPeople(n); // 남은 좌석만큼만 예약: 인원을 먼저 줄임
       seatBoxes.forEach((b) => { if (b.checked) b.click(); }); // 이미 체크된 것은 해제 후 다시
       for (const n of seatPicks) { boxOf(n).click(); await sleep(30); }
@@ -272,11 +288,11 @@
     const people = count();
     const seatsShort = seatBoxes.length > 0 && seatPicks.length !== people;
     const notes = [];
-    if (cappedTo) notes.push(`인원이 ${CONFIG.people}명이 아니라 ${cappedTo}명입니다(최대 인원 제한)`);
+    if (mismatch) notes.push(`인원이 ${allowed}명으로 맞춰지지 않았습니다(지금 ${count()}명)`);
     if (seatsShort) notes.push(`좌석이 ${seatPicks.length}석만 골라졌습니다. 인원(${people}명)만큼 직접 골라 주세요`);
     const summary = `인원 ${people}명${seatBoxes.length ? (seatPicks.length ? `, 좌석 ${seatPicks.join(', ')}번` : ', 좌석 없음') : ''}, 예약자 ${document.querySelector('input[name=name]')?.value || '(비어 있음)'}`;
 
-    if (!CONFIG.autoSubmit || !fromScript || short || seatsShort || cappedTo) {
+    if (!CONFIG.autoSubmit || !fromScript || short || seatsShort || mismatch) {
       const why = CONFIG.autoSubmit && !fromScript ? ' (직접 연 화면이라 자동 신청은 하지 않습니다)' : '';
       status(`입력 완료: ${summary}. ${notes.join(', ')}${notes.length ? '. ' : ''}내용을 확인하고 빨간 테두리 "예약하기"를 누르세요.${why}`);
       return;

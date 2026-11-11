@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.6.1111-160022
+// @version      2.8.7.1111-160949
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -859,17 +859,18 @@
     if (picks.length < want && CONFIG.fallbackAnySeat) picks = picks.concat(freeSeats.filter((n) => !picks.includes(n)).slice(0, want - picks.length));
     return picks;
   }
-  // 잡은 좌석이 인원보다 적을 때: "남은 좌석만큼만 예약"이 켜져 있고 최소 인원 이상이면 그 인원으로 진행.
-  // 진행할 인원 수를 돌려주고, 진행하지 않으면(자동 신청 안 함) 0
-  function seatShortage(got, want) {
+  // 잡은 좌석(또는 예약 가능한 인원)이 설정 인원보다 적을 때: "남은 좌석만큼만 예약"이 켜져 있고 최소 인원 이상이면 그 인원으로 진행.
+  // 진행할 인원 수를 돌려주고, 진행하지 않으면(자동 신청 안 함) 0. what: '좌석' 또는 '인원'(배의 최대 예약 인원)
+  function seatShortage(got, want, what = '좌석') {
     if (got >= want) return want;
+    const have = what === '좌석' ? `잡을 수 있는 좌석이 ${got}석` : `예약 가능한 인원이 ${got}명`;
+    const none = what === '좌석' ? '잡을 수 있는 좌석이 없습니다' : '예약 가능한 인원이 없습니다';
     const min = Math.max(1, CONFIG.minPeople || 1);
     if (CONFIG.partialSeats && got >= min) {
-      toast(`잡을 수 있는 좌석이 ${got}석뿐이라 ${got}명으로 예약합니다 (설정 인원 ${want}명)`);
+      toast(`${have}뿐이라 ${got}명으로 예약합니다 (설정 인원 ${want}명)`);
       return got;
     }
-    const why = !got ? '잡을 수 있는 좌석이 없습니다'
-      : `잡을 수 있는 좌석이 ${got}석뿐입니다 (설정 인원 ${want}명${CONFIG.partialSeats ? `, 최소 인원 ${min}명` : ''})`;
+    const why = !got ? none : `${have}뿐입니다 (설정 인원 ${want}명${CONFIG.partialSeats ? `, 최소 인원 ${min}명` : ''})`;
     toast(`${why}. 자동 신청하지 않습니다. 화면을 확인하고 직접 정하세요.`);
     return 0;
   }

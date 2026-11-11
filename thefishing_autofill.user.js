@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.6.1.1111-092230
+// @version      2.6.2.1111-093236
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -22,6 +22,7 @@
   // ===================== 설정 항목 =====================
   // 값은 코드가 아니라 화면 위 "설정" 버튼에서 입력합니다. 이 사이트(주소)별로 브라우저에 저장되고, 스크립트가 업데이트돼도 유지됩니다.
   const STORE_KEY = 'fishingReserv.thefishing';
+  const SIM_URL = 'https://seong-geon-choi.github.io/fishing-reserv/seat_simulator.html';
   const DEFAULTS = {
     date: '', shipName: [],
     name: '', depositor: '', tel: ['', '', ''],
@@ -159,6 +160,7 @@
       .shipnote { margin:-4px 0 0; }
       .pickrow { margin:4px 0 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
       .pickrow button { padding:4px 10px; font-size:12px; }
+      .simlink { font-size:12px; font-weight:700; color:#1c6fb8; }
       .btns { margin-top:12px; }
     </style>
     <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><span class="pick" hidden><button class="pnew" type="button">새 그룹</button><button class="pundo" type="button">하나 지우기</button><button class="pcancel" type="button">취소</button><button class="pdone primary" type="button">완료</button></span><button class="start primary" type="button" hidden>예약 대기 시작</button><span class="ask" hidden><button class="wait1" type="button">1분 더 기다리기</button><button class="cut" type="button">끊고 새로 요청</button></span><button class="stop" type="button" hidden>중지</button><button class="gear" type="button">설정</button></div>
@@ -205,6 +207,14 @@
           ? `<div class="pickrow"><button type="button" class="pickseat">좌석판에서 고르기</button><span class="help">배 그림에서 순서대로 눌러 정하기</span></div>`
           : `<div class="pickrow"><span class="help">좌석판에서 고르기: 열린 날짜의 예약 화면(낚시종류 선택 후)에서 설정을 여세요</span></div>`);
         panel.querySelector('.pickseat')?.addEventListener('click', startPick);
+        // 좌석 시뮬레이터: 지금 배·인원·좌석 그룹(입력 중인 값)을 넘겨서 열기. 개인정보는 넘기지 않음
+        ui.getElementById(id).closest('label').insertAdjacentHTML('beforeend',
+          `<div class="pickrow"><a class="simlink" target="_blank" rel="noopener" href="${SIM_URL}">좌석 시뮬레이터에서 미리 보기 ↗</a></div>`);
+        panel.querySelector('.simlink').addEventListener('click', (e) => {
+          const groups = ui.getElementById('f_seatGroups').value.split('\n').map((l) => nums(l).join(',')).filter(Boolean).join('|');
+          const p = new URLSearchParams({ ship: ship ? ship.id : '', people: ui.getElementById('f_people').value, groups, fallback: ui.getElementById('f_fallbackAnySeat')?.checked ? '1' : '0' });
+          e.currentTarget.href = `${SIM_URL}#${p}`;
+        });
       }
     }
     panel.insertAdjacentHTML('beforeend', `<div class="btns"><button type="button" class="close">닫기</button><button type="submit" class="primary">저장하고 새로고침</button></div>`);

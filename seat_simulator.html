@@ -282,6 +282,22 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
   }
   const cur = () => loadShip(shipKey);
   const save = () => store.set('sim2.' + shipKey, cur());
+
+  // 예약 스크립트 설정 창의 "미리 보기" 링크로 들어온 경우: #ship=배번호&people=2&groups=8,9,7|2,3 를 적용
+  (() => {
+    const h = new URLSearchParams(location.hash.slice(1));
+    if (!h.has('ship') && !h.has('groups')) return;
+    const SHIP_IDS = { 3570: 'manseok', 2956: 'nadaese' };
+    shipKey = SHIP_IDS[h.get('ship')] || (h.has('ship') ? 'custom' : shipKey);
+    store.set('sim.ship', shipKey);
+    const s = cur();
+    if (h.has('groups')) s.groupsText = h.get('groups').split('|').map((g) => g.trim()).filter(Boolean).join('\n');
+    const n = parseInt(h.get('people'), 10);
+    if (n > 0) s.people = n;
+    if (h.has('fallback')) s.fallback = h.get('fallback') === '1';
+    save();
+  })();
+
   let editing = false;
   let selSlot = null; // 편집 중 선택된 좌석의 슬롯
 

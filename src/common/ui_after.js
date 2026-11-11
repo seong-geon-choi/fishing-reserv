@@ -26,3 +26,10 @@
     window.confirm = (m) => { toast(`사이트 확인창은 취소로 처리했습니다: ${m}`); return false; };
     return () => { window.alert = a; window.confirm = c; };
   }
+  // 사용자가 누를 버튼을 화면 가운데로 옮기고 빨간 테두리로 강조.
+  // 사이트 CSS가 테두리를 막아도 보이게 important로 지정 (더피싱: * { outline: 0 !important })
+  function markButton(btn) {
+    btn.scrollIntoView({ block: 'center' });
+    btn.style.setProperty('outline', '4px solid red', 'important');
+    btn.style.setProperty('outline-offset', '2px', 'important');
+  }

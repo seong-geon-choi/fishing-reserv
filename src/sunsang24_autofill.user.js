@@ -284,8 +284,7 @@
     if (all && !all.checked) all.click();
     document.querySelectorAll('input[name="agree_rule[]"]').forEach((c) => { if (!c.checked) c.click(); });
 
-    btn.scrollIntoView({ block: 'center' });
-    btn.style.outline = '4px solid red';
+    markButton(btn);
 
     const people = count();
     const seatsShort = seatBoxes.length > 0 && seatPicks.length !== people;

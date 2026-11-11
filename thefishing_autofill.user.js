@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.8.1111-161221
+// @version      2.8.9.1111-162103
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -262,6 +262,13 @@
     window.alert = (m) => toast(`사이트 안내: ${m}`);
     window.confirm = (m) => { toast(`사이트 확인창은 취소로 처리했습니다: ${m}`); return false; };
     return () => { window.alert = a; window.confirm = c; };
+  }
+  // 사용자가 누를 버튼을 화면 가운데로 옮기고 빨간 테두리로 강조.
+  // 사이트 CSS가 테두리를 막아도 보이게 important로 지정 (더피싱: * { outline: 0 !important })
+  function markButton(btn) {
+    btn.scrollIntoView({ block: 'center' });
+    btn.style.setProperty('outline', '4px solid red', 'important');
+    btn.style.setProperty('outline-offset', '2px', 'important');
   }
 
   // 설정 창 머리 + 빈 입력 칸 격자. 버전 "2.3.1.1110-225502" (기본 버전.월일-시분초) → "버전 2.3.1 · 수정 11-10 22:55:02"
@@ -955,8 +962,7 @@
     check('all_agree', 'Y');
 
     const btn = document.getElementById('submit');
-    btn.scrollIntoView({ block: 'center' });
-    btn.style.outline = '4px solid red';
+    markButton(btn);
     const seats = picks.length ? `좌석 ${picks.join(', ')}번` : seatShip ? '좌석 없음' : '좌석 지정 없음';
     if (short) {
       status(`${seats}: 잡을 수 있는 자리가 설정 인원(${CONFIG.people}명)보다 적어 자동 신청하지 않았습니다. 인원과 좌석을 확인하고 직접 신청하세요.`);

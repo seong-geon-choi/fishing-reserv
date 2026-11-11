@@ -662,8 +662,7 @@
     check('all_agree', 'Y');
 
     const btn = document.getElementById('submit');
-    btn.scrollIntoView({ block: 'center' });
-    btn.style.outline = '4px solid red';
+    markButton(btn);
     const seats = picks.length ? `좌석 ${picks.join(', ')}번` : seatShip ? '좌석 없음' : '좌석 지정 없음';
     if (short) {
       status(`${seats}: 잡을 수 있는 자리가 설정 인원(${CONFIG.people}명)보다 적어 자동 신청하지 않았습니다. 인원과 좌석을 확인하고 직접 신청하세요.`);

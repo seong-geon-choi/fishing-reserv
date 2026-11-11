@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.8.1111-161221
+// @version      2.5.9.1111-162103
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -173,6 +173,13 @@
     window.alert = (m) => toast(`사이트 안내: ${m}`);
     window.confirm = (m) => { toast(`사이트 확인창은 취소로 처리했습니다: ${m}`); return false; };
     return () => { window.alert = a; window.confirm = c; };
+  }
+  // 사용자가 누를 버튼을 화면 가운데로 옮기고 빨간 테두리로 강조.
+  // 사이트 CSS가 테두리를 막아도 보이게 important로 지정 (더피싱: * { outline: 0 !important })
+  function markButton(btn) {
+    btn.scrollIntoView({ block: 'center' });
+    btn.style.setProperty('outline', '4px solid red', 'important');
+    btn.style.setProperty('outline-offset', '2px', 'important');
   }
 
   // 설정 창 머리 + 빈 입력 칸 격자. 버전 "2.3.1.1110-225502" (기본 버전.월일-시분초) → "버전 2.3.1 · 수정 11-10 22:55:02"
@@ -577,8 +584,7 @@
     if (all && !all.checked) all.click();
     document.querySelectorAll('input[name="agree_rule[]"]').forEach((c) => { if (!c.checked) c.click(); });
 
-    btn.scrollIntoView({ block: 'center' });
-    btn.style.outline = '4px solid red';
+    markButton(btn);
 
     const people = count();
     const seatsShort = seatBoxes.length > 0 && seatPicks.length !== people;

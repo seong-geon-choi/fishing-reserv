@@ -79,6 +79,7 @@
     stopBtn.hidden = false;
     const tick = () => {
       if (stopped) return;
+      if (asking) { setTimeout(tick, 200); return; } // 긴급 정지 확인창이 떠 있으면 다시 열지 않고 기다림
       status(`${why} ${sec}초 뒤 다시 엽니다… (그만하려면 중지)`);
       if (sec-- <= 0) { beforeReload?.(); location.reload(); return; }
       setTimeout(tick, 1000);

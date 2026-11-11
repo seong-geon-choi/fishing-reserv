@@ -32,3 +32,10 @@
       .auto { animation:autoblink-badge 1s steps(1) infinite; }
       @keyframes autoblink { 50% { border-color:rgba(224, 49, 49, .15); } }
       @keyframes autoblink-badge { 50% { background:#7a1515; } }
+      /* 긴급 정지 확인창 */
+      .halt { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; }
+      .halt[hidden] { display:none; }
+      .halt-box { background:#fff; color:#1f2933; border-radius:10px; padding:18px 20px; width:min(420px, calc(100vw - 32px)); box-shadow:0 10px 30px rgba(0,0,0,.35); font-size:14px; font-weight:400; }
+      .halt-box b { font-size:16px; color:#c92a2a; }
+      .halt-box p { margin:8px 0 14px; color:#52606d; }
+      .halt-box .btns { display:flex; gap:8px; justify-content:flex-end; }

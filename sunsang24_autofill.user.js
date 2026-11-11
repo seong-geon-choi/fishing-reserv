@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.19.1111-170058
+// @version      2.5.20.1111-170552
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -133,6 +133,13 @@
       .auto { animation:autoblink-badge 1s steps(1) infinite; }
       @keyframes autoblink { 50% { border-color:rgba(224, 49, 49, .15); } }
       @keyframes autoblink-badge { 50% { background:#7a1515; } }
+      /* 긴급 정지 확인창 */
+      .halt { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; }
+      .halt[hidden] { display:none; }
+      .halt-box { background:#fff; color:#1f2933; border-radius:10px; padding:18px 20px; width:min(420px, calc(100vw - 32px)); box-shadow:0 10px 30px rgba(0,0,0,.35); font-size:14px; font-weight:400; }
+      .halt-box b { font-size:16px; color:#c92a2a; }
+      .halt-box p { margin:8px 0 14px; color:#52606d; }
+      .halt-box .btns { display:flex; gap:8px; justify-content:flex-end; }
       /* 떠 있는 설정 창 + 한 화면 격자 배치 */
       .panel { position:fixed; margin:0; max-width:none; width:min(820px, calc(100vw - 16px)); max-height:calc(100vh - 16px); border-radius:10px; padding:0 16px 14px; }
       .phead { display:flex; align-items:center; gap:8px; margin:0 -16px 8px; padding:9px 12px 9px 16px; background:#1f2933; color:#fff;
@@ -499,12 +506,54 @@
     stopBtn.hidden = false;
     const tick = () => {
       if (stopped) return;
+      if (asking) { setTimeout(tick, 200); return; } // 긴급 정지 확인창이 떠 있으면 다시 열지 않고 기다림
       status(`${why} ${sec}초 뒤 다시 엽니다… (그만하려면 중지)`);
       if (sec-- <= 0) { beforeReload?.(); location.reload(); return; }
       setTimeout(tick, 1000);
     };
     tick();
   }
+
+  // ---------- 긴급 정지: 스크립트가 일하는 중(예약 대기·다시 열기·자동입력)에 Esc → 확인창 → 모두 멈춤 ----------
+  // 브라우저 기본 확인창(confirm)은 브라우저 전체를 멈추므로 쓰지 않고 화면 안의 확인창을 씀.
+  // 확인창이 떠 있는 동안에는 예약 화면 이동·다시 열기·자동 신청 같은 다음 단계로 넘어가지 않음 (checkpoint에서 기다림)
+  let halted = false; // 긴급 정지함
+  let asking = false; // 확인창이 떠 있음
+  let filling = false; // 예약 화면 자동입력 중
+  let onHalt = () => {}; // 사이트별 정리 (이 탭의 시작 표시 지우기 등)
+  const haltBox = document.createElement('div');
+  haltBox.className = 'halt';
+  haltBox.hidden = true;
+  haltBox.innerHTML = `<div class="halt-box" role="alertdialog" aria-modal="true"><b>스크립트 작업을 중단할까요?</b>
+    <p>예약 대기, 자동입력, 자동 신청을 모두 멈춥니다. 사이트 화면에 이미 입력된 내용은 그대로 둡니다.</p>
+    <div class="btns"><button type="button" class="halt-no">취소</button><button type="button" class="halt-yes primary">중단</button></div></div>`;
+  ui.appendChild(haltBox);
+  const busy = () => !halted && (filling || !stopBtn.hidden);
+  const closeAsk = () => { asking = false; haltBox.hidden = true; };
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || asking || !busy()) return; // 일하지 않을 때는 사이트의 Esc 동작을 막지 않음
+    e.preventDefault();
+    e.stopPropagation();
+    asking = true;
+    haltBox.hidden = false;
+    haltBox.querySelector('.halt-yes').focus(); // Enter = 중단
+  }, true);
+  haltBox.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeAsk(); } });
+  haltBox.querySelector('.halt-no').onclick = closeAsk;
+  haltBox.querySelector('.halt-yes').onclick = () => { closeAsk(); halt(); };
+  function halt() {
+    halted = true;
+    stopped = true; // 대기·겹쳐 보내기·다시 열기가 이 표시를 보고 멈춤
+    for (const c of ['.stop', '.ask', '.start']) ui.querySelector(c).hidden = true;
+    onHalt();
+    status('긴급 정지했습니다. 스크립트는 더 이상 아무것도 하지 않습니다. 다시 하려면 새로고침한 뒤 시작하세요.');
+  }
+  // 다음 단계로 넘어가기 전에 부름: 확인창이 떠 있으면 답할 때까지 기다리고, 정지했으면 false
+  async function checkpoint() {
+    while (asking) await sleep(100);
+    return !halted;
+  }
+  onHalt = () => { try { sessionStorage.removeItem(FLAG); } catch (e) { /* 무시 */ } };
   stopBtn.onclick = () => {
     stopped = true;
     stopBtn.hidden = true;
@@ -551,6 +600,7 @@
       return findSchedule(new DOMParser().parseFromString(html, 'text/html'));
     }, dead, label);
     if (!url) return;
+    if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
     stopBtn.hidden = true;
     status(`예약 오픈 감지! 예약 화면으로 이동합니다 (${url.split('/').slice(-2).join('/')})`);
     try { sessionStorage.setItem(FLAG, url); } catch (e) { /* 저장 불가 시 자동 제출만 생략됨 */ }
@@ -653,6 +703,7 @@
       seatPicks = seatBoxes.filter((b) => b.checked).map((b) => +b.value);
     }
     unmute();
+    if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
 
     const setVal = (sel, v) => { const el = document.querySelector(sel); if (el && v) el.value = v; };
     if (CONFIG.name) setVal('input[name=name]', CONFIG.name);
@@ -683,6 +734,7 @@
     }
 
     // 자동 제출: 사이트의 확인창(confirm)을 자동으로 "확인" 처리
+    if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
     let confirmed = false;
     window.confirm = (msg) => { confirmed = true; console.log('[자동입력] 확인창 자동 승인:', msg); return true; };
     status(`${summary} 예약 신청 중…`);
@@ -705,7 +757,7 @@
   if (isReserve) {
     // 여기까지 오면 "예약 대기 시작"으로 넘어온 화면 (맨 위에서 확인)
     const loggedOut = !document.getElementById('btn_payment') && document.querySelector('.btn_payment');
-    if (document.getElementById('btn_payment')) fillReservation();
+    if (document.getElementById('btn_payment')) { filling = true; fillReservation().finally(() => { filling = false; }); }
     else if (loggedOut) status(LOGIN_MSG);
     else {
       // 혼잡으로 예약 화면이 제대로 안 열림 → 시작 표시를 다시 남기고 잠시 뒤 다시 열기 (다시 열리면 이어서 진행)

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.17.1111-170058
+// @version      2.8.18.1111-170552
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -149,6 +149,13 @@
       .auto { animation:autoblink-badge 1s steps(1) infinite; }
       @keyframes autoblink { 50% { border-color:rgba(224, 49, 49, .15); } }
       @keyframes autoblink-badge { 50% { background:#7a1515; } }
+      /* 긴급 정지 확인창 */
+      .halt { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; }
+      .halt[hidden] { display:none; }
+      .halt-box { background:#fff; color:#1f2933; border-radius:10px; padding:18px 20px; width:min(420px, calc(100vw - 32px)); box-shadow:0 10px 30px rgba(0,0,0,.35); font-size:14px; font-weight:400; }
+      .halt-box b { font-size:16px; color:#c92a2a; }
+      .halt-box p { margin:8px 0 14px; color:#52606d; }
+      .halt-box .btns { display:flex; gap:8px; justify-content:flex-end; }
       h3.shiphead { margin:18px 0 2px; padding-top:12px; border-top:1px solid #d5dce2; font-size:15px; color:#1c6fb8; }
       .shipnote { margin:0 0 10px; }
       .pickrow { margin:-6px 0 12px; }
@@ -875,12 +882,54 @@
     stopBtn.hidden = false;
     const tick = () => {
       if (stopped) return;
+      if (asking) { setTimeout(tick, 200); return; } // 긴급 정지 확인창이 떠 있으면 다시 열지 않고 기다림
       status(`${why} ${sec}초 뒤 다시 엽니다… (그만하려면 중지)`);
       if (sec-- <= 0) { beforeReload?.(); location.reload(); return; }
       setTimeout(tick, 1000);
     };
     tick();
   }
+
+  // ---------- 긴급 정지: 스크립트가 일하는 중(예약 대기·다시 열기·자동입력)에 Esc → 확인창 → 모두 멈춤 ----------
+  // 브라우저 기본 확인창(confirm)은 브라우저 전체를 멈추므로 쓰지 않고 화면 안의 확인창을 씀.
+  // 확인창이 떠 있는 동안에는 예약 화면 이동·다시 열기·자동 신청 같은 다음 단계로 넘어가지 않음 (checkpoint에서 기다림)
+  let halted = false; // 긴급 정지함
+  let asking = false; // 확인창이 떠 있음
+  let filling = false; // 예약 화면 자동입력 중
+  let onHalt = () => {}; // 사이트별 정리 (이 탭의 시작 표시 지우기 등)
+  const haltBox = document.createElement('div');
+  haltBox.className = 'halt';
+  haltBox.hidden = true;
+  haltBox.innerHTML = `<div class="halt-box" role="alertdialog" aria-modal="true"><b>스크립트 작업을 중단할까요?</b>
+    <p>예약 대기, 자동입력, 자동 신청을 모두 멈춥니다. 사이트 화면에 이미 입력된 내용은 그대로 둡니다.</p>
+    <div class="btns"><button type="button" class="halt-no">취소</button><button type="button" class="halt-yes primary">중단</button></div></div>`;
+  ui.appendChild(haltBox);
+  const busy = () => !halted && (filling || !stopBtn.hidden);
+  const closeAsk = () => { asking = false; haltBox.hidden = true; };
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || asking || !busy()) return; // 일하지 않을 때는 사이트의 Esc 동작을 막지 않음
+    e.preventDefault();
+    e.stopPropagation();
+    asking = true;
+    haltBox.hidden = false;
+    haltBox.querySelector('.halt-yes').focus(); // Enter = 중단
+  }, true);
+  haltBox.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeAsk(); } });
+  haltBox.querySelector('.halt-no').onclick = closeAsk;
+  haltBox.querySelector('.halt-yes').onclick = () => { closeAsk(); halt(); };
+  function halt() {
+    halted = true;
+    stopped = true; // 대기·겹쳐 보내기·다시 열기가 이 표시를 보고 멈춤
+    for (const c of ['.stop', '.ask', '.start']) ui.querySelector(c).hidden = true;
+    onHalt();
+    status('긴급 정지했습니다. 스크립트는 더 이상 아무것도 하지 않습니다. 다시 하려면 새로고침한 뒤 시작하세요.');
+  }
+  // 다음 단계로 넘어가기 전에 부름: 확인창이 떠 있으면 답할 때까지 기다리고, 정지했으면 false
+  async function checkpoint() {
+    while (asking) await sleep(100);
+    return !halted;
+  }
+  onHalt = () => { try { sessionStorage.removeItem(TARGET_KEY); } catch (e) { /* 무시 */ } };
   stopBtn.onclick = () => {
     stopped = true;
     stopBtn.hidden = true;
@@ -901,6 +950,7 @@
       return found.length ? found : null;
     }, dead, `${date}${openLabel}`);
     if (!radios) return;
+    if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
     // 받은 화면에서 낚시종류를 골라, 그 종류가 선택된 예약 화면으로 바로 이동 (새로고침 + 선택 페이지 로딩 2번 → 1번)
     stopBtn.hidden = true;
     const pick = pickFish(radios);
@@ -997,6 +1047,7 @@
       applied = await settled(15000);
     }
     unmute();
+    if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
 
     const set = (sel, v) => { const el = document.querySelector(sel); if (el) el.value = v; };
     set('[name=BI_NAME]', CONFIG.name);
@@ -1025,6 +1076,7 @@
     }
     if (CONFIG.autoSubmit) {
       status(`${seats}, 인원 ${document.getElementById('BI_IN').value}명으로 예약 신청 중…`);
+      if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
       btn.click(); // 사이트의 form_check 검증을 거쳐 제출됨
       return;
     }
@@ -1042,7 +1094,7 @@
   function runStep1() {
     if (q.get('PS_N_UID')) {
       // 낚시종류까지 고른 화면인데 입력칸이 없으면 (혼잡으로 화면이 제대로 안 열림) 잠시 뒤 다시 열기
-      if (document.getElementById('BI_IN') && document.getElementById('submit')) { fillForm(); return; }
+      if (document.getElementById('BI_IN') && document.getElementById('submit')) { filling = true; fillForm().finally(() => { filling = false; }); return; }
       if (fishRadios().length || /예약할 수 없는/.test(document.body?.textContent || '')) { waitForOpen(); return; }
       reloadSoon('예약 화면이 제대로 열리지 않았습니다.');
       return;

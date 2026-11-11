@@ -189,6 +189,8 @@
   // 1) 일정 페이지: 오픈 시각까지 카운트다운 → 바로예약 버튼이 생길 때까지 확인 → 예약 화면으로 이동
   // 대기 중지: "중지"를 누르면 확인 요청을 멈추고 시작 버튼으로 돌아감
 //@@include wait.js
+//@@include halt.js
+  onHalt = () => { try { sessionStorage.removeItem(FLAG); } catch (e) { /* 무시 */ } };
   stopBtn.onclick = () => {
     stopped = true;
     stopBtn.hidden = true;
@@ -235,6 +237,7 @@
       return findSchedule(new DOMParser().parseFromString(html, 'text/html'));
     }, dead, label);
     if (!url) return;
+    if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
     stopBtn.hidden = true;
     status(`예약 오픈 감지! 예약 화면으로 이동합니다 (${url.split('/').slice(-2).join('/')})`);
     try { sessionStorage.setItem(FLAG, url); } catch (e) { /* 저장 불가 시 자동 제출만 생략됨 */ }
@@ -311,6 +314,7 @@
       seatPicks = seatBoxes.filter((b) => b.checked).map((b) => +b.value);
     }
     unmute();
+    if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
 
     const setVal = (sel, v) => { const el = document.querySelector(sel); if (el && v) el.value = v; };
     if (CONFIG.name) setVal('input[name=name]', CONFIG.name);
@@ -341,6 +345,7 @@
     }
 
     // 자동 제출: 사이트의 확인창(confirm)을 자동으로 "확인" 처리
+    if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
     let confirmed = false;
     window.confirm = (msg) => { confirmed = true; console.log('[자동입력] 확인창 자동 승인:', msg); return true; };
     status(`${summary} 예약 신청 중…`);
@@ -363,7 +368,7 @@
   if (isReserve) {
     // 여기까지 오면 "예약 대기 시작"으로 넘어온 화면 (맨 위에서 확인)
     const loggedOut = !document.getElementById('btn_payment') && document.querySelector('.btn_payment');
-    if (document.getElementById('btn_payment')) fillReservation();
+    if (document.getElementById('btn_payment')) { filling = true; fillReservation().finally(() => { filling = false; }); }
     else if (loggedOut) status(LOGIN_MSG);
     else {
       // 혼잡으로 예약 화면이 제대로 안 열림 → 시작 표시를 다시 남기고 잠시 뒤 다시 열기 (다시 열리면 이어서 진행)

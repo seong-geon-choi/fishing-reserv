@@ -562,6 +562,8 @@
   // 1) 오픈 전: 페이지를 새로고침하지 않고 fetch로 확인하다가, 열리면 낚시종류가 선택된 화면으로 바로 이동
   // 대기 중지: "중지"를 누르면 확인 요청을 멈추고, 이 탭의 시작 표시도 지워 새로고침해도 다시 시작하지 않음
 //@@include wait.js
+//@@include halt.js
+  onHalt = () => { try { sessionStorage.removeItem(TARGET_KEY); } catch (e) { /* 무시 */ } };
   stopBtn.onclick = () => {
     stopped = true;
     stopBtn.hidden = true;
@@ -582,6 +584,7 @@
       return found.length ? found : null;
     }, dead, `${date}${openLabel}`);
     if (!radios) return;
+    if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
     // 받은 화면에서 낚시종류를 골라, 그 종류가 선택된 예약 화면으로 바로 이동 (새로고침 + 선택 페이지 로딩 2번 → 1번)
     stopBtn.hidden = true;
     const pick = pickFish(radios);
@@ -655,6 +658,7 @@
       applied = await settled(15000);
     }
     unmute();
+    if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
 
     const set = (sel, v) => { const el = document.querySelector(sel); if (el) el.value = v; };
     set('[name=BI_NAME]', CONFIG.name);
@@ -683,6 +687,7 @@
     }
     if (CONFIG.autoSubmit) {
       status(`${seats}, 인원 ${document.getElementById('BI_IN').value}명으로 예약 신청 중…`);
+      if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
       btn.click(); // 사이트의 form_check 검증을 거쳐 제출됨
       return;
     }
@@ -700,7 +705,7 @@
   function runStep1() {
     if (q.get('PS_N_UID')) {
       // 낚시종류까지 고른 화면인데 입력칸이 없으면 (혼잡으로 화면이 제대로 안 열림) 잠시 뒤 다시 열기
-      if (document.getElementById('BI_IN') && document.getElementById('submit')) { fillForm(); return; }
+      if (document.getElementById('BI_IN') && document.getElementById('submit')) { filling = true; fillForm().finally(() => { filling = false; }); return; }
       if (fishRadios().length || /예약할 수 없는/.test(document.body?.textContent || '')) { waitForOpen(); return; }
       reloadSoon('예약 화면이 제대로 열리지 않았습니다.');
       return;

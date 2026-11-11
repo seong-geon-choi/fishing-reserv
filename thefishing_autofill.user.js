@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.7.4.1111-105446
+// @version      2.8.0.1111-110213
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -18,6 +18,14 @@
   const isList = /^\/(index\.php)?$/.test(location.pathname) && new URLSearchParams(location.search).get('mid') === 'bk';
   const isStep1 = /^\/_core\/module\/reservation_boat_[^/]+\/popu[p2]\.step1\.php$/.test(location.pathname);
   if (!isList && !isStep1) return;
+  // 예약 화면은 예약 목록 페이지에서 "예약 대기 시작"으로 넘어온 경우(이 탭에 시작 표시가 있을 때)만 동작.
+  // 사이트의 "예약하기"로 직접 연 예약 화면에서는 아무것도 표시하지 않음 (설정·좌석 고르기는 예약 목록 페이지에서)
+  if (isStep1) {
+    const q0 = new URLSearchParams(location.search);
+    let started = false;
+    try { started = sessionStorage.getItem('frs_target') === `${q0.get('date')}|${q0.get('PA_N_UID')}`; } catch (e) { /* 무시 */ }
+    if (!started) return;
+  }
 
   // ===================== 설정 항목 =====================
   // 값은 코드가 아니라 화면 위 "설정" 버튼에서 입력합니다. 이 사이트(주소)별로 브라우저에 저장되고, 스크립트가 업데이트돼도 유지됩니다.
@@ -664,7 +672,6 @@
   // → 사이트의 "예약하기"로 다른 날짜·배 팝업을 열었을 때 자동입력/자동신청이 일어나지 않게
   const TARGET_KEY = 'frs_target';
   const arm = (target) => { try { sessionStorage.setItem(TARGET_KEY, target); } catch (e) { /* 저장 불가 시 매번 버튼 필요 */ } };
-  const armedFor = (target) => { try { return sessionStorage.getItem(TARGET_KEY) === target; } catch (e) { return false; } };
 
   // ===================== 예약 자동입력 =====================
   const q = new URLSearchParams(location.search);
@@ -899,6 +906,5 @@
   }
 
   if (isList) startOnList();
-  else if (armedFor(`${date}|${pa}`)) runStep1();
-  else showStep1Start(`${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)} 예약 화면입니다. 이 날짜로 자동입력을 하려면 "예약 대기 시작"을 누르세요.`);
+  else runStep1(); // 예약 화면은 시작 표시가 있을 때만 여기까지 옴 (맨 위에서 확인)
 })();

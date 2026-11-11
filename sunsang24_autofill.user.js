@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.2.1111-141557
+// @version      2.5.3.1111-142538
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -143,6 +143,9 @@
     <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><button class="start primary" type="button" hidden>예약 대기 시작</button><span class="ask" hidden><button class="wait1" type="button">1분 더 기다리기</button><button class="cut" type="button">끊고 새로 요청</button></span><button class="stop" type="button" hidden>중지</button><button class="gear" type="button">설정</button></div>
     <form class="panel" hidden></form>`;
   document.documentElement.appendChild(host);
+  // 상태 바가 사이트 위쪽 메뉴(로그인 등)를 가리지 않게, 바 높이만큼 페이지를 아래로 밀기
+  const $bar = ui.querySelector('.bar');
+  new ResizeObserver(() => { document.documentElement.style.paddingTop = $bar.offsetHeight + 'px'; }).observe($bar);
   const $msg = ui.querySelector('.msg');
   const panel = ui.querySelector('.panel');
   const status = (m) => { $msg.textContent = m; console.log('[자동입력]', m); };

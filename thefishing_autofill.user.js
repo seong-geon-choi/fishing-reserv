@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.7.0.1111-095140
+// @version      2.7.0.1111-095300
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -403,8 +403,8 @@
 
   function renderMap() {
     const NS = 'http://www.w3.org/2000/svg';
-    if (!pick.seats || !pick.seats.length) { svg.hidden = true; return; }
-    svg.hidden = false;
+    if (!pick.seats || !pick.seats.length) { svg.toggleAttribute('hidden', true); return; }
+    svg.toggleAttribute('hidden', false);
     svg.innerHTML = `<path d="M 6 152 C 30 70, 100 16, 190 14 L 932 14 Q 954 14 954 36 L 954 268 Q 954 290 932 290 L 190 290 C 100 288, 30 234, 6 152 Z" fill="#eef2f5" stroke="#9aabb9" stroke-width="3"/>
       <rect x="236" y="98" width="600" height="108" rx="10" fill="#f8fafb" stroke="#d5dce2"/>
       <text x="536" y="157" text-anchor="middle" font-size="15" fill="#52606d">${pick.ship.name}</text>
@@ -444,7 +444,7 @@
   async function showDate(i) {
     pick.cur = i;
     pick.seats = null;
-    svg.hidden = true;
+    svg.toggleAttribute('hidden', true);
     mapMsg.hidden = false;
     mapMsg.textContent = '배 그림을 불러오는 중…';
     renderDates();
@@ -509,7 +509,7 @@
     panel.hidden = true;
     pp.hidden = false;
     pp.querySelector('.pp-title').textContent = `배 그림에서 좌석 고르기 · ${ship.name}`;
-    svg.hidden = true;
+    svg.toggleAttribute('hidden', true);
     mapMsg.hidden = false;
     mapMsg.textContent = '예약 가능한 날짜를 찾는 중… (예약 화면을 보기만 하고, 예약은 하지 않습니다)';
     renderPick();

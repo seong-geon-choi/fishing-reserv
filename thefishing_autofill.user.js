@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.6.2.1111-093236
+// @version      2.6.3.1111-093803
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -134,8 +134,27 @@
       h3.shiphead { margin:18px 0 2px; padding-top:12px; border-top:1px solid #d5dce2; font-size:15px; color:#1c6fb8; }
       .shipnote { margin:0 0 10px; }
       .pickrow { margin:-6px 0 12px; }
-      .pick { display:flex; flex-wrap:wrap; gap:6px; }
-      .pick[hidden] { display:none; }
+      .pickpanel { position:fixed; right:12px; top:52px; width:300px; max-width:calc(100vw - 24px); max-height:calc(100vh - 64px); overflow:auto;
+        background:#fff; color:#1f2933; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.28); padding:0 14px 12px; font-size:13px; font-weight:400; }
+      .pickpanel[hidden] { display:none; }
+      @media (max-width: 640px) { .pickpanel { top:auto; bottom:8px; right:8px; left:8px; width:auto; max-height:45vh; } }
+      .pp-head { margin:0 -14px 8px; padding:9px 14px; background:#1f2933; color:#fff; font-weight:700; border-radius:10px 10px 0 0; }
+      .pp-steps { margin:0 0 6px; padding-left:18px; line-height:1.5; }
+      .pp-hint { margin:0 0 8px; color:#52606d; font-size:12px; }
+      .pp-groups { display:flex; flex-direction:column; gap:6px; margin-bottom:8px; }
+      .pp-group { border:2px solid #d5dce2; border-radius:8px; padding:6px 8px; cursor:pointer; }
+      .pp-group.active { background:#f3f7fb; }
+      .pp-group .pp-top { display:flex; align-items:center; gap:6px; }
+      .pp-group .pp-name { font-weight:700; }
+      .pp-group .pp-now { font-size:11px; color:#fff; border-radius:4px; padding:0 5px; }
+      .pp-group .pp-del { margin-left:auto; padding:2px 6px; font-size:12px; }
+      .pp-chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; min-height:22px; }
+      .pp-chip { display:inline-flex; align-items:center; gap:3px; border-radius:11px; padding:1px 4px 1px 8px; color:#fff; font-weight:700; font-size:12px; }
+      .pp-chip button { border:0; background:rgba(255,255,255,.25); color:#fff; border-radius:50%; width:16px; height:16px; padding:0; font-size:11px; line-height:16px; }
+      .pp-empty { color:#9aa5b1; font-size:12px; }
+      .pp-warn { color:#b45309; font-size:11px; margin-top:3px; }
+      .pp-add { width:100%; margin-bottom:8px; }
+      .pp-btns { display:flex; gap:8px; justify-content:flex-end; }
       /* 떠 있는 설정 창 + 한 화면 격자 배치 */
       .panel { position:fixed; margin:0; max-width:none; width:min(820px, calc(100vw - 16px)); max-height:calc(100vh - 16px); border-radius:10px; padding:0 16px 14px; }
       .phead { display:flex; align-items:center; gap:8px; margin:0 -16px 8px; padding:9px 12px 9px 16px; background:#1f2933; color:#fff;
@@ -163,8 +182,20 @@
       .simlink { font-size:12px; font-weight:700; color:#1c6fb8; }
       .btns { margin-top:12px; }
     </style>
-    <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><span class="pick" hidden><button class="pnew" type="button">새 그룹</button><button class="pundo" type="button">하나 지우기</button><button class="pcancel" type="button">취소</button><button class="pdone primary" type="button">완료</button></span><button class="start primary" type="button" hidden>예약 대기 시작</button><span class="ask" hidden><button class="wait1" type="button">1분 더 기다리기</button><button class="cut" type="button">끊고 새로 요청</button></span><button class="stop" type="button" hidden>중지</button><button class="gear" type="button">설정</button></div>
-    <form class="panel" hidden></form>`;
+    <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><button class="start primary" type="button" hidden>예약 대기 시작</button><span class="ask" hidden><button class="wait1" type="button">1분 더 기다리기</button><button class="cut" type="button">끊고 새로 요청</button></span><button class="stop" type="button" hidden>중지</button><button class="gear" type="button">설정</button></div>
+    <form class="panel" hidden></form>
+    <div class="pickpanel" hidden>
+      <div class="pp-head">배 그림에서 좌석 고르기</div>
+      <ol class="pp-steps">
+        <li>같이 앉고 싶은 좌석을 <b>원하는 순서대로</b> 누르세요.</li>
+        <li>다른 후보 자리가 있으면 <b>+ 다음 후보 그룹 추가</b>를 누르고 이어서 고르세요.</li>
+        <li>다 고르면 <b>완료</b>를 누르세요.</li>
+      </ol>
+      <p class="pp-hint"></p>
+      <div class="pp-groups"></div>
+      <button type="button" class="pp-add">+ 다음 후보 그룹 추가</button>
+      <div class="pp-btns"><button type="button" class="pp-cancel">취소</button><button type="button" class="pp-done primary">완료</button></div>
+    </div>`;
   document.documentElement.appendChild(host);
   const $msg = ui.querySelector('.msg');
   const panel = ui.querySelector('.panel');
@@ -204,8 +235,8 @@
       ui.getElementById(id).value = toText(f, c[f.key]);
       if (f.key === 'seatGroups') {
         ui.getElementById(id).closest('label').insertAdjacentHTML('beforeend', seatSpans().length
-          ? `<div class="pickrow"><button type="button" class="pickseat">좌석판에서 고르기</button><span class="help">배 그림에서 순서대로 눌러 정하기</span></div>`
-          : `<div class="pickrow"><span class="help">좌석판에서 고르기: 열린 날짜의 예약 화면(낚시종류 선택 후)에서 설정을 여세요</span></div>`);
+          ? `<div class="pickrow"><button type="button" class="pickseat">배 그림에서 좌석 고르기</button></div>`
+          : `<div class="pickrow"><span class="help">배 그림에서 고르려면: 예약이 열린 날짜의 예약 화면에서 낚시종류를 고른 뒤 설정을 여세요</span></div>`);
         panel.querySelector('.pickseat')?.addEventListener('click', startPick);
         // 좌석 시뮬레이터: 지금 배·인원·좌석 그룹(입력 중인 값)을 넘겨서 열기. 개인정보는 넘기지 않음
         ui.getElementById(id).closest('label').insertAdjacentHTML('beforeend',
@@ -280,49 +311,95 @@
 
   ui.querySelector('.gear').onclick = () => (panel.hidden ? openPanel() : (panel.hidden = true));
 
-  // ---------- 좌석판에서 고르기: 사이트 좌석판의 좌석을 누른 순서대로 좌석 그룹을 만듦 ----------
+  // ---------- 배 그림에서 좌석 고르기: 도우미 창에서 그룹(1순위, 2순위…)을 만들고 고침 ----------
   // 좌석 번호는 칸의 첫 글자 노드에서 읽음 (고르는 중에 붙이는 순서 배지 글자와 섞이지 않게)
   const seatNo = (s) => ((s.firstChild && s.firstChild.nodeType === 3 ? s.firstChild.nodeValue : s.textContent) || '').trim();
   const seatSpans = () => [...document.querySelectorAll('.res_ship_seat span')].filter((s) => /^\d+$/.test(seatNo(s)));
-  let pick = null; // { groups: [[...]], before: '설정 창 textarea 값' }
+  const GROUP_COLORS = ['#e8590c', '#1c6fb8', '#2b8a3e', '#862e9c', '#c2255c', '#5f3dc4'];
+  const gColor = (i) => GROUP_COLORS[i % GROUP_COLORS.length];
+  let pick = null; // { groups: [[...]], active: 지금 고르는 그룹, before: 설정 창 값, hidden: 숨긴 버튼 }
+  const pp = ui.querySelector('.pickpanel');
   const pickStyle = document.createElement('style');
   pickStyle.textContent = `
-    .frs-seat { outline: 3px dashed #1c6fb8 !important; cursor: pointer !important; position: relative; }
-    .frs-on { outline: 3px solid #e8590c !important; }
-    .frs-badge { position: absolute; top: -9px; right: -9px; z-index: 10; min-width: 22px; height: 18px; padding: 0 3px; border-radius: 9px;
-      background: #e8590c; color: #fff; font: bold 11px/18px sans-serif; text-align: center; pointer-events: none; }`;
+    .frs-seat { outline: 3px dashed #9aa5b1 !important; outline-offset: 2px; cursor: pointer !important; position: relative; }
+    .frs-badge { position: absolute; top: -10px; right: -10px; z-index: 10; min-width: 20px; height: 20px; padding: 0 4px; border-radius: 10px;
+      color: #fff; font: bold 12px/20px sans-serif; text-align: center; pointer-events: none; box-shadow: 0 0 0 2px #fff; }`;
+
   function renderPick() {
-    pick.groups = pick.groups.filter((g, i) => g.length || i === pick.groups.length - 1); // 중간의 빈 그룹 정리
+    const people = parseInt(ui.getElementById('f_people')?.value, 10) || 0;
+    // 배 그림: 그룹 색 테두리 + 그룹 안 순서 숫자
     document.querySelectorAll('.frs-badge').forEach((b) => b.remove());
-    for (const s of seatSpans()) {
-      const n = Number(seatNo(s));
+    for (const sp of seatSpans()) {
+      const n = Number(seatNo(sp));
       const gi = pick.groups.findIndex((g) => g.includes(n));
-      s.classList.toggle('frs-on', gi >= 0);
-      if (gi >= 0) s.insertAdjacentHTML('beforeend', `<b class="frs-badge">${gi + 1}-${pick.groups[gi].indexOf(n) + 1}</b>`);
+      sp.style.outlineColor = gi >= 0 ? gColor(gi) : '';
+      sp.style.outlineStyle = gi >= 0 ? 'solid' : '';
+      if (gi >= 0) sp.insertAdjacentHTML('beforeend', `<b class="frs-badge" style="background:${gColor(gi)}">${pick.groups[gi].indexOf(n) + 1}</b>`);
     }
-    const text = pick.groups.map((g, i) => g.length ? `그룹${i + 1}: ${g.join(', ')}` : '').filter(Boolean).join(' / ');
-    status(`원하는 순서대로 좌석을 누르세요. 다시 누르면 빠집니다. ${text || '(아직 고른 좌석 없음)'}`);
+    // 도우미 창: 그룹 목록
+    pp.querySelector('.pp-hint').textContent = people ? `예약 인원 ${people}명: 그룹마다 ${people}자리 이상 고르면 그 그룹 안에서 자리를 잡습니다.` : '';
+    pp.querySelector('.pp-groups').innerHTML = pick.groups.map((g, i) => {
+      const chips = g.length
+        ? g.map((n) => `<span class="pp-chip" style="background:${gColor(i)}">${n}<button type="button" data-g="${i}" data-n="${n}" title="${n}번 빼기">×</button></span>`).join('')
+        : '<span class="pp-empty">배 그림에서 좌석을 누르세요</span>';
+      const warn = g.length && people && g.length < people ? `<div class="pp-warn">인원 ${people}명보다 적어서 이 그룹만으로는 자리를 다 잡지 못합니다</div>` : '';
+      return `<div class="pp-group ${i === pick.active ? 'active' : ''}" data-g="${i}" style="border-color:${i === pick.active ? gColor(i) : ''}">
+        <div class="pp-top"><span class="pp-name" style="color:${gColor(i)}">${i + 1}순위</span>${i === pick.active ? `<span class="pp-now" style="background:${gColor(i)}">지금 고르는 중</span>` : ''}<button type="button" class="pp-del" data-g="${i}" title="이 그룹 지우기">🗑 삭제</button></div>
+        <div class="pp-chips">${chips}</div>${warn}</div>`;
+    }).join('');
+    const total = pick.groups.reduce((a, g) => a + g.length, 0);
+    status(`좌석 고르기 중: ${pick.groups.length}개 그룹, ${total}자리. 오른쪽 창에서 고치고 "완료"를 누르세요.`);
   }
+
+  // 배 그림의 좌석 누르기: 없으면 지금 그룹에 추가, 이미 있으면 빼기
   function onPickClick(e) {
-    const s = e.target.closest('.res_ship_seat span');
-    if (!s || !/^\d+$/.test(seatNo(s))) return;
+    const sp = e.target.closest('.res_ship_seat span');
+    if (!sp || !/^\d+$/.test(seatNo(sp))) return;
     e.preventDefault(); e.stopImmediatePropagation(); // 사이트의 좌석 선택(ticket_seat_click)은 실행하지 않음
-    const n = Number(seatNo(s));
+    const n = Number(seatNo(sp));
     const gi = pick.groups.findIndex((g) => g.includes(n));
     if (gi >= 0) pick.groups[gi].splice(pick.groups[gi].indexOf(n), 1);
-    else pick.groups[pick.groups.length - 1].push(n);
+    else pick.groups[pick.active].push(n);
     renderPick();
   }
+
+  // 도우미 창 안의 클릭: 그룹 선택 / 좌석 빼기 / 그룹 삭제
+  pp.addEventListener('click', (e) => {
+    if (!pick) return;
+    const chipX = e.target.closest('.pp-chip button');
+    const del = e.target.closest('.pp-del');
+    const grp = e.target.closest('.pp-group');
+    if (chipX) {
+      const g = pick.groups[+chipX.dataset.g];
+      g.splice(g.indexOf(+chipX.dataset.n), 1);
+    } else if (del) {
+      const i = +del.dataset.g;
+      pick.groups.splice(i, 1);
+      if (!pick.groups.length) pick.groups.push([]);
+      if (pick.active >= i) pick.active = Math.max(0, pick.active - 1);
+    } else if (grp) {
+      pick.active = +grp.dataset.g; // 이 그룹에 이어서 고르기
+    } else return;
+    renderPick();
+  });
+  pp.querySelector('.pp-add').onclick = () => {
+    const empty = pick.groups.findIndex((g) => !g.length);
+    if (empty >= 0) pick.active = empty; // 빈 그룹이 있으면 그걸 사용
+    else { pick.groups.push([]); pick.active = pick.groups.length - 1; }
+    renderPick();
+  };
+
   function startPick() {
     const ta = ui.getElementById('f_seatGroups');
     const groups = ta.value.split('\n').map(nums).filter((g) => g.length);
-    pick = { groups: groups.length ? groups : [[]], before: ta.value };
-    if (pick.groups[pick.groups.length - 1].length) pick.groups.push([]); // 이어서 고르는 좌석은 새 그룹으로
+    pick = { groups: groups.length ? groups : [[]], active: 0, before: ta.value, hidden: {} };
+    if (groups.length) { pick.groups.push([]); pick.active = pick.groups.length - 1; } // 기존 그룹은 두고 새 그룹부터
+    // 고르는 동안 다른 버튼(예약 대기 시작·중지·설정 등)은 숨김
+    for (const c of ['.gear', '.start', '.stop', '.ask']) { const el = ui.querySelector(c); if (el) { pick.hidden[c] = el.hidden; el.hidden = true; } }
     panel.hidden = true;
-    ui.querySelector('.gear').hidden = true;
-    ui.querySelector('.pick').hidden = false;
+    pp.hidden = false;
     document.head.appendChild(pickStyle);
-    seatSpans().forEach((s) => s.classList.add('frs-seat'));
+    seatSpans().forEach((sp) => sp.classList.add('frs-seat'));
     document.addEventListener('click', onPickClick, true);
     document.querySelector('.res_ship_seat').scrollIntoView({ block: 'center' });
     renderPick();
@@ -330,10 +407,10 @@
   function endPick(apply) {
     document.removeEventListener('click', onPickClick, true);
     document.querySelectorAll('.frs-badge').forEach((b) => b.remove());
-    seatSpans().forEach((s) => s.classList.remove('frs-seat', 'frs-on'));
+    seatSpans().forEach((sp) => { sp.classList.remove('frs-seat'); sp.style.outlineColor = ''; sp.style.outlineStyle = ''; });
     pickStyle.remove();
-    ui.querySelector('.pick').hidden = true;
-    ui.querySelector('.gear').hidden = false;
+    pp.hidden = true;
+    for (const c in pick.hidden) ui.querySelector(c).hidden = pick.hidden[c];
     ui.getElementById('f_seatGroups').value = apply
       ? pick.groups.filter((g) => g.length).map((g) => g.join(', ')).join('\n')
       : pick.before;
@@ -341,14 +418,8 @@
     status(apply ? '좌석 그룹을 설정 창에 넣었습니다. "저장하고 새로고침"을 눌러야 저장됩니다.' : '좌석 고르기를 취소했습니다.');
     panel.hidden = false;
   }
-  ui.querySelector('.pnew').onclick = () => { if (pick.groups[pick.groups.length - 1].length) pick.groups.push([]); renderPick(); };
-  ui.querySelector('.pundo').onclick = () => {
-    const g = [...pick.groups].reverse().find((x) => x.length);
-    if (g) g.pop();
-    renderPick();
-  };
-  ui.querySelector('.pcancel').onclick = () => endPick(false);
-  ui.querySelector('.pdone').onclick = () => endPick(true);
+  pp.querySelector('.pp-cancel').onclick = () => endPick(false);
+  pp.querySelector('.pp-done').onclick = () => endPick(true);
 
   // 예약 화면에서는 이 배의 배별 설정(낚시종류·좌석)을 적용
   const CONFIG = isStep1 ? forShip(loadConfig(), new URLSearchParams(location.search).get('PA_N_UID')) : loadConfig();

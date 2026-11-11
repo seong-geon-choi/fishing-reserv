@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.13.1111-163316
+// @version      2.5.14.1111-163355
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -148,7 +148,7 @@
       .pickrow button { padding:4px 10px; font-size:12px; }
       .btns { margin-top:12px; }
       label.c .inl { margin-left:auto; display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
-      label.c .inl input { width:56px; }
+      label.c .inl input { width:64px; }
       .seatimg img { display:block; max-width:100%; border-radius:6px; }
       .seatimg .help { margin-top:4px; }
     </style>

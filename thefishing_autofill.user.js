@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.13.1111-163316
+// @version      2.8.14.1111-163355
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -178,7 +178,7 @@
       .pickrow button { padding:4px 10px; font-size:12px; }
       .btns { margin-top:12px; }
       label.c .inl { margin-left:auto; display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
-      label.c .inl input { width:56px; }
+      label.c .inl input { width:64px; }
       .simlink { font-size:12px; font-weight:700; color:#1c6fb8; }
       .pickpanel { position:fixed; left:50%; top:52px; transform:translateX(-50%); width:min(1120px, calc(100vw - 16px)); max-height:calc(100vh - 60px); overflow:auto;
         background:#fff; color:#1f2933; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.3); padding:0 14px 12px; font-size:13px; font-weight:400; }

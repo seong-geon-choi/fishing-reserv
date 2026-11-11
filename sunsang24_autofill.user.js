@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.7.1111-160949
+// @version      2.5.8.1111-161221
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -165,6 +165,14 @@
     t.textContent = m;
     $toasts.appendChild(t);
     setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 400); }, ms);
+  }
+  // 스크립트가 인원·좌석을 넣는 동안 사이트의 경고창(alert)·확인창(confirm)이 화면을 멈추지 않게:
+  // 경고창은 토스트로 보여 주고, 확인창(예: 대기자 등록)은 "취소"로 처리. 돌려받은 함수를 부르면 원래대로
+  function muteDialogs() {
+    const a = window.alert, c = window.confirm;
+    window.alert = (m) => toast(`사이트 안내: ${m}`);
+    window.confirm = (m) => { toast(`사이트 확인창은 취소로 처리했습니다: ${m}`); return false; };
+    return () => { window.alert = a; window.confirm = c; };
   }
 
   // 설정 창 머리 + 빈 입력 칸 격자. 버전 "2.3.1.1110-225502" (기본 버전.월일-시분초) → "버전 2.3.1 · 수정 11-10 22:55:02"
@@ -532,6 +540,7 @@
         if (count() === before) break;
       }
     };
+    const unmute = muteDialogs(); // 그래도 사이트 경고창이 뜨면 화면을 멈추지 않고 토스트로
     const allowed = Math.min(CONFIG.people, maxPeople());
     // 예약 가능한 인원이 설정 인원보다 적으면 좌석이 모자랄 때와 같은 규칙("남은 좌석만큼만 예약"·최소 인원)
     const peopleOk = seatShortage(allowed, CONFIG.people, '인원');
@@ -554,6 +563,7 @@
       for (const n of seatPicks) { boxOf(n).click(); await sleep(30); }
       seatPicks = seatBoxes.filter((b) => b.checked).map((b) => +b.value);
     }
+    unmute();
 
     const setVal = (sel, v) => { const el = document.querySelector(sel); if (el && v) el.value = v; };
     if (CONFIG.name) setVal('input[name=name]', CONFIG.name);
@@ -573,6 +583,7 @@
     const people = count();
     const seatsShort = seatBoxes.length > 0 && seatPicks.length !== people;
     const notes = [];
+    if (!peopleOk) notes.push(`예약 가능한 인원이 ${allowed}명이라 설정 인원(${CONFIG.people}명)을 채우지 못해 자동 신청하지 않았습니다`);
     if (mismatch) notes.push(`인원이 ${allowed}명으로 맞춰지지 않았습니다(지금 ${count()}명)`);
     if (seatsShort) notes.push(`좌석이 ${seatPicks.length}석만 골라졌습니다. 인원(${people}명)만큼 직접 골라 주세요`);
     const summary = `인원 ${people}명${seatBoxes.length ? (seatPicks.length ? `, 좌석 ${seatPicks.join(', ')}번` : ', 좌석 없음') : ''}, 예약자 ${document.querySelector('input[name=name]')?.value || '(비어 있음)'}`;

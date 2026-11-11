@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.7.1111-160949
+// @version      2.8.8.1111-161221
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -254,6 +254,14 @@
     t.textContent = m;
     $toasts.appendChild(t);
     setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 400); }, ms);
+  }
+  // 스크립트가 인원·좌석을 넣는 동안 사이트의 경고창(alert)·확인창(confirm)이 화면을 멈추지 않게:
+  // 경고창은 토스트로 보여 주고, 확인창(예: 대기자 등록)은 "취소"로 처리. 돌려받은 함수를 부르면 원래대로
+  function muteDialogs() {
+    const a = window.alert, c = window.confirm;
+    window.alert = (m) => toast(`사이트 안내: ${m}`);
+    window.confirm = (m) => { toast(`사이트 확인창은 취소로 처리했습니다: ${m}`); return false; };
+    return () => { window.alert = a; window.confirm = c; };
   }
 
   // 설정 창 머리 + 빈 입력 칸 격자. 버전 "2.3.1.1110-225502" (기본 버전.월일-시분초) → "버전 2.3.1 · 수정 11-10 22:55:02"
@@ -875,6 +883,13 @@
     return 0;
   }
 
+  // 좌석 지정이 없는 배의 남은 자리: 사이트가 인원 확인 요청에 함께 보내는 값(naun, 낚시종류 줄의 "(2명)"과 같음).
+  // 이보다 많이 고르면 사이트가 대기자 확인창이나 "최대 예약인원 초과" 경고창을 띄움
+  function remainSeats() {
+    const m = [...document.scripts].map((sc) => sc.textContent).join('\n').match(/naun=(\d+)/);
+    return m ? +m[1] : Infinity;
+  }
+
   // 3) 좌석 → 예약자 정보 → 동의
   async function fillForm() {
     // 좌석이 있는 배인지: 좌석판에 번호 칸이 있으면 (빈 좌석이 0개여도)
@@ -885,7 +900,9 @@
     const freeSeats = seatSpans.map(seatNo);
     const chosen = seatSpans.filter((el) => el.classList.contains('res_num_view_chosen')).map(seatNo);
     let picks = [];
-    let short = false; // 좌석이 모자라 자동 신청하지 않음
+    let short = false; // 자리가 모자라 자동 신청하지 않음
+    let chosenNone = false; // 좌석도 인원도 넣지 않음 (기다릴 것 없음)
+    const unmute = muteDialogs(); // 인원·좌석을 넣는 동안 사이트 경고창이 화면을 멈추지 않게
     if (seatShip) {
       picks = pickSeats(freeSeats, CONFIG.people);
       short = !seatShortage(picks.length, CONFIG.people);
@@ -893,10 +910,16 @@
       // 누를 때마다 선택/해제가 바뀌므로, 이미 눌러 둔 좌석은 고른 것만 두고 풀고, 나머지 고른 좌석만 누름
       const toggle = [...chosen.filter((n) => !picks.includes(n)), ...picks.filter((n) => !chosen.includes(n))];
       for (const n of toggle) { window.ticket_seat_click(date, pa, String(n)); await sleep(250); }
+      chosenNone = !picks.length;
     } else {
-      // 좌석지정이 없는 배/종류인 경우 인원만 선택
-      document.getElementById('BI_IN').value = String(CONFIG.people);
-      window.popup_ajax_step1();
+      // 좌석지정이 없는 배/종류인 경우 인원만 선택. 남은 자리를 넘지 않게 (모자라면 "남은 좌석만큼만 예약" 규칙)
+      const allowed = Math.min(CONFIG.people, remainSeats());
+      short = !seatShortage(allowed, CONFIG.people, '인원');
+      chosenNone = allowed <= 0;
+      if (!chosenNone) {
+        document.getElementById('BI_IN').value = String(allowed);
+        window.popup_ajax_step1();
+      }
     }
     // 인원/금액 반영(사이트 ajax) 완료 대기: 혼잡하면 느리니 최대 15초, 안 되면 한 번 더 요청
     const statEl = document.getElementById('temp_bi_stat');
@@ -910,12 +933,13 @@
       return false;
     };
     status('인원·금액 반영을 기다리는 중…');
-    let applied = seatShip && !picks.length ? true : await settled(15000); // 누른 좌석이 없으면 기다릴 것도 없음
+    let applied = chosenNone ? true : await settled(15000); // 넣은 것이 없으면 기다릴 것도 없음
     if (!applied) {
       status('사이트 응답이 늦어 인원·금액을 다시 요청합니다…');
       window.popup_ajax_step1();
       applied = await settled(15000);
     }
+    unmute();
 
     const set = (sel, v) => { const el = document.querySelector(sel); if (el) el.value = v; };
     set('[name=BI_NAME]', CONFIG.name);
@@ -935,7 +959,7 @@
     btn.style.outline = '4px solid red';
     const seats = picks.length ? `좌석 ${picks.join(', ')}번` : seatShip ? '좌석 없음' : '좌석 지정 없음';
     if (short) {
-      status(`${seats}: 잡을 수 있는 좌석이 설정 인원(${CONFIG.people}명)보다 적어 자동 신청하지 않았습니다. 인원과 좌석을 확인하고 직접 신청하세요.`);
+      status(`${seats}: 잡을 수 있는 자리가 설정 인원(${CONFIG.people}명)보다 적어 자동 신청하지 않았습니다. 인원과 좌석을 확인하고 직접 신청하세요.`);
       return;
     }
     if (!applied) {

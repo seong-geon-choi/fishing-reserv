@@ -18,3 +18,11 @@
     $toasts.appendChild(t);
     setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 400); }, ms);
   }
+  // 스크립트가 인원·좌석을 넣는 동안 사이트의 경고창(alert)·확인창(confirm)이 화면을 멈추지 않게:
+  // 경고창은 토스트로 보여 주고, 확인창(예: 대기자 등록)은 "취소"로 처리. 돌려받은 함수를 부르면 원래대로
+  function muteDialogs() {
+    const a = window.alert, c = window.confirm;
+    window.alert = (m) => toast(`사이트 안내: ${m}`);
+    window.confirm = (m) => { toast(`사이트 확인창은 취소로 처리했습니다: ${m}`); return false; };
+    return () => { window.alert = a; window.confirm = c; };
+  }

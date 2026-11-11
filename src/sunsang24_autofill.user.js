@@ -247,6 +247,7 @@
         if (count() === before) break;
       }
     };
+    const unmute = muteDialogs(); // 그래도 사이트 경고창이 뜨면 화면을 멈추지 않고 토스트로
     const allowed = Math.min(CONFIG.people, maxPeople());
     // 예약 가능한 인원이 설정 인원보다 적으면 좌석이 모자랄 때와 같은 규칙("남은 좌석만큼만 예약"·최소 인원)
     const peopleOk = seatShortage(allowed, CONFIG.people, '인원');
@@ -269,6 +270,7 @@
       for (const n of seatPicks) { boxOf(n).click(); await sleep(30); }
       seatPicks = seatBoxes.filter((b) => b.checked).map((b) => +b.value);
     }
+    unmute();
 
     const setVal = (sel, v) => { const el = document.querySelector(sel); if (el && v) el.value = v; };
     if (CONFIG.name) setVal('input[name=name]', CONFIG.name);
@@ -288,6 +290,7 @@
     const people = count();
     const seatsShort = seatBoxes.length > 0 && seatPicks.length !== people;
     const notes = [];
+    if (!peopleOk) notes.push(`예약 가능한 인원이 ${allowed}명이라 설정 인원(${CONFIG.people}명)을 채우지 못해 자동 신청하지 않았습니다`);
     if (mismatch) notes.push(`인원이 ${allowed}명으로 맞춰지지 않았습니다(지금 ${count()}명)`);
     if (seatsShort) notes.push(`좌석이 ${seatPicks.length}석만 골라졌습니다. 인원(${people}명)만큼 직접 골라 주세요`);
     const summary = `인원 ${people}명${seatBoxes.length ? (seatPicks.length ? `, 좌석 ${seatPicks.join(', ')}번` : ', 좌석 없음') : ''}, 예약자 ${document.querySelector('input[name=name]')?.value || '(비어 있음)'}`;

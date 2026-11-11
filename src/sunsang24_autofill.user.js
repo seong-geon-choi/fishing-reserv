@@ -20,7 +20,7 @@
   const STORE_KEY = 'fishingReserv.sunsang24';
   const DEFAULTS = {
     date: '', shipName: [], people: 2, name: '', depositor: '', phone: ['', '', ''],
-    seatGroups: [], fallbackAnySeat: true,
+    seatGroups: [], fallbackAnySeat: true, partialSeats: false, minPeople: 1,
     openAt: '', startBeforeSec: 30, pollMs: 1000, autoSubmit: false,
   };
   const FIELDS = [
@@ -32,6 +32,7 @@
     { key: 'phone', w: 1, label: '휴대폰 번호', type: 'phone', help: '화면이 비었을 때만' },
     { key: 'seatGroups', w: 2, label: '좌석 그룹 (좌석 선택이 있는 배만)', type: 'groups', help: '한 줄에 그룹 하나 (예: 2, 3, 4), 위쪽이 우선. 예약 화면의 자리배치도 그림 번호를 보고 적으세요. 좌석 선택이 없는 배에서는 무시' },
     { key: 'fallbackAnySeat', w: 2, label: '그룹으로 인원을 못 채우면 남은 좌석으로 채우기', type: 'check' },
+//@@include fields_partial.js
     { key: 'openAt', w: 2, label: '예약 오픈 시각', type: 'datetime', help: '비우면 시작하자마자 확인' },
     { key: 'startBeforeSec', w: 1, label: '몇 초 전부터 확인', type: 'number', min: 5, max: 600 },
     { key: 'pollMs', w: 1, label: '확인 간격(ms)', type: 'number', min: 500, max: 10000, help: '1000 이상 권장' },
@@ -211,6 +212,8 @@
     location.href = url;
   }
 
+//@@include seats.js
+
   // 2) 예약 화면: 인원 → 예약자 → 약관 동의 → (autoSubmit) 예약하기
   // fromScript: 일정 페이지에서 "예약 대기 시작"으로 들어온 경우만 true (자동 신청은 이때만)
   async function fillReservation(fromScript) {
@@ -223,26 +226,29 @@
     // 인원: +/− 버튼을 눌러 맞춤 (최대 인원에 막히면 멈춤)
     const countEl = document.querySelector('.people_count');
     const count = () => parseInt(countEl?.textContent, 10) || 0;
-    for (let i = 0; i < 40 && countEl && count() !== CONFIG.people; i++) {
-      const before = count();
-      document.querySelector(before < CONFIG.people ? 'a.plus' : 'a.minus')?.click();
-      await sleep(80);
-      if (count() === before) break;
-    }
+    const setPeople = async (target) => {
+      for (let i = 0; i < 40 && countEl && count() !== target; i++) {
+        const before = count();
+        document.querySelector(before < target ? 'a.plus' : 'a.minus')?.click();
+        await sleep(80);
+        if (count() === before) break;
+      }
+    };
+    await setPeople(CONFIG.people);
+    const cappedTo = count() !== CONFIG.people ? count() : 0; // 배의 최대 인원 제한에 막힘
 
     // 좌석 선택이 있는 배(예: 뉴항구호): 체크박스 목록 = 지금 빈 좌석. 좌석 그룹 규칙으로 인원수만큼 체크.
     // 사이트는 "체크 수 > 인원"이면 경고창을 띄우므로 인원을 먼저 맞춘 뒤, 인원수까지만 체크함
     const seatBoxes = [...document.querySelectorAll('input[name="select_seat_nos[]"]')];
     let seatPicks = [];
+    let short = false; // 좌석이 모자라 자동 신청하지 않음
     if (seatBoxes.length) {
       const boxOf = (n) => seatBoxes.find((b) => +b.value === n && !b.disabled);
       const want = count();
-      const group = CONFIG.seatGroups.find((g) => g.filter(boxOf).length >= want);
-      seatPicks = (group || [...new Set(CONFIG.seatGroups.flat())]).filter(boxOf).slice(0, want);
-      if (seatPicks.length < want && CONFIG.fallbackAnySeat) {
-        const others = seatBoxes.filter((b) => !b.disabled && !seatPicks.includes(+b.value)).map((b) => +b.value);
-        seatPicks = seatPicks.concat(others.slice(0, want - seatPicks.length));
-      }
+      seatPicks = pickSeats(seatBoxes.filter((b) => !b.disabled).map((b) => +b.value), want);
+      const n = seatShortage(seatPicks.length, want);
+      short = !n;
+      if (n && n < want) await setPeople(n); // 남은 좌석만큼만 예약: 인원을 먼저 줄임
       seatBoxes.forEach((b) => { if (b.checked) b.click(); }); // 이미 체크된 것은 해제 후 다시
       for (const n of seatPicks) { boxOf(n).click(); await sleep(30); }
       seatPicks = seatBoxes.filter((b) => b.checked).map((b) => +b.value);
@@ -266,11 +272,11 @@
     const people = count();
     const seatsShort = seatBoxes.length > 0 && seatPicks.length !== people;
     const notes = [];
-    if (people !== CONFIG.people) notes.push(`인원이 ${CONFIG.people}명이 아니라 ${people}명입니다(최대 인원 제한)`);
+    if (cappedTo) notes.push(`인원이 ${CONFIG.people}명이 아니라 ${cappedTo}명입니다(최대 인원 제한)`);
     if (seatsShort) notes.push(`좌석이 ${seatPicks.length}석만 골라졌습니다. 인원(${people}명)만큼 직접 골라 주세요`);
     const summary = `인원 ${people}명${seatBoxes.length ? (seatPicks.length ? `, 좌석 ${seatPicks.join(', ')}번` : ', 좌석 없음') : ''}, 예약자 ${document.querySelector('input[name=name]')?.value || '(비어 있음)'}`;
 
-    if (!CONFIG.autoSubmit || !fromScript || seatsShort || people !== CONFIG.people) {
+    if (!CONFIG.autoSubmit || !fromScript || short || seatsShort || cappedTo) {
       const why = CONFIG.autoSubmit && !fromScript ? ' (직접 연 화면이라 자동 신청은 하지 않습니다)' : '';
       status(`입력 완료: ${summary}. ${notes.join(', ')}${notes.length ? '. ' : ''}내용을 확인하고 빨간 테두리 "예약하기"를 누르세요.${why}`);
       return;

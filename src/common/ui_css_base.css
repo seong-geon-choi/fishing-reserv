@@ -24,3 +24,5 @@
       .ver { font-size:12px; font-weight:400; color:#52606d; }
       .ask { display:inline-flex; gap:6px; }
       .ask[hidden] { display:none; }
+      .toasts { position:fixed; left:50%; transform:translateX(-50%); width:min(560px, calc(100vw - 16px)); display:flex; flex-direction:column; gap:6px; pointer-events:none; }
+      .toast { background:#1f2933; color:#fff; border-left:5px solid #ffe14d; border-radius:8px; padding:10px 14px; font-size:14px; font-weight:700; box-shadow:0 6px 20px rgba(0,0,0,.3); transition:opacity .4s; }

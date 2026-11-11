@@ -34,7 +34,7 @@
   const DEFAULTS = {
     date: '', shipName: [],
     name: '', depositor: '', tel: ['', '', ''],
-    people: 2, fishKeywords: [], seatGroups: [], fallbackAnySeat: true,
+    people: 2, fishKeywords: [], seatGroups: [], fallbackAnySeat: true, partialSeats: false, minPeople: 1,
     openAt: '', startBeforeSec: 30, pollMs: 700, autoSubmit: false,
     perShip: {}, // 배 번호(PA_N_UID)별 설정: { '3570': { fishKeywords, seatGroups, fallbackAnySeat } }
   };
@@ -45,6 +45,7 @@
     { key: 'depositor', w: 1, label: '입금자명', type: 'text', help: '예약자와 다를 때만' },
     { key: 'tel', w: 1, label: '휴대폰 번호', type: 'phone', required: true, help: '010-1234-5678' },
     { key: 'people', w: 1, label: '예약 인원', type: 'number', min: 1, max: 30 },
+//@@include fields_partial.js
     { key: 'fishKeywords', w: 2, perShip: true, label: '낚시종류 키워드', type: 'list', help: '쉼표로 구분. 하나라도 들어간 맨 위 종류, 비우면 첫 번째' },
     { key: 'seatGroups', w: 2, perShip: true, label: '좌석 그룹', type: 'groups', help: '한 줄에 그룹 하나 (예: 7, 8, 9), 위쪽이 우선' },
     { key: 'fallbackAnySeat', w: 4, perShip: true, label: '그룹으로 인원을 못 채우면 남은 좌석으로 채우기', type: 'check' },
@@ -586,21 +587,20 @@
     location.href = fishUrl(pick);
   }
 
+//@@include seats.js
+
   // 3) 좌석 → 예약자 정보 → 동의
   async function fillForm() {
-    const seatEl = (n) => document.getElementById(`c${date}${pa}${n}`);
-    const isFree = (n) => { const el = seatEl(n); return el && el.getAttribute('onclick') && el.classList.contains('res_num_view'); };
-
-    const group = CONFIG.seatGroups.find((g) => g.filter(isFree).length >= CONFIG.people);
-    let picks = (group || [...new Set(CONFIG.seatGroups.flat())]).filter(isFree).slice(0, CONFIG.people);
-    if (picks.length < CONFIG.people && CONFIG.fallbackAnySeat) {
-      const others = [...document.querySelectorAll(`span[id^="c${date}${pa}"].res_num_view[onclick]`)]
-        .map((el) => Number(el.id.slice(`c${date}${pa}`.length)))
-        .filter((n) => !picks.includes(n));
-      picks = picks.concat(others.slice(0, CONFIG.people - picks.length));
-    }
-
-    if (picks.length) {
+    // 좌석이 있는 배인지: 좌석판에 번호 칸이 있으면 (빈 좌석이 0개여도)
+    const seatShip = [...document.querySelectorAll('.res_ship_seat [class*="res_seat"] span')].some((s) => /^\d+$/.test(s.textContent.trim()));
+    // 지금 빈 좌석 (화면 순서)
+    const freeSeats = [...document.querySelectorAll(`span[id^="c${date}${pa}"].res_num_view[onclick]`)].map((el) => Number(el.id.slice(`c${date}${pa}`.length)));
+    let picks = [];
+    let short = false; // 좌석이 모자라 자동 신청하지 않음
+    if (seatShip) {
+      picks = pickSeats(freeSeats, CONFIG.people);
+      short = !seatShortage(picks.length, CONFIG.people);
+      // 좌석을 누른 수만큼 인원이 정해짐 (남은 좌석만큼만 예약이면 그 인원으로)
       for (const n of picks) { window.ticket_seat_click(date, pa, String(n)); await sleep(250); }
     } else {
       // 좌석지정이 없는 배/종류인 경우 인원만 선택
@@ -619,7 +619,7 @@
       return false;
     };
     status('인원·금액 반영을 기다리는 중…');
-    let applied = await settled(15000);
+    let applied = seatShip && !picks.length ? true : await settled(15000); // 누른 좌석이 없으면 기다릴 것도 없음
     if (!applied) {
       status('사이트 응답이 늦어 인원·금액을 다시 요청합니다…');
       window.popup_ajax_step1();
@@ -642,7 +642,11 @@
     const btn = document.getElementById('submit');
     btn.scrollIntoView({ block: 'center' });
     btn.style.outline = '4px solid red';
-    const seats = picks.length ? `좌석 ${picks.join(', ')}번` : '좌석 지정 없음';
+    const seats = picks.length ? `좌석 ${picks.join(', ')}번` : seatShip ? '좌석 없음' : '좌석 지정 없음';
+    if (short) {
+      status(`${seats}: 잡을 수 있는 좌석이 설정 인원(${CONFIG.people}명)보다 적어 자동 신청하지 않았습니다. 인원과 좌석을 확인하고 직접 신청하세요.`);
+      return;
+    }
     if (!applied) {
       // 인원·금액이 확인되지 않은 채로 자동 신청하지 않음
       status(`${seats}: 사이트 응답이 없어 인원·금액이 확인되지 않았습니다. 화면의 인원과 금액을 확인하고 직접 신청하세요.`);

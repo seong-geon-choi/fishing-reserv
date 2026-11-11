@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.0.1111-125600
+// @version      2.5.1.1111-130059
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -137,6 +137,8 @@
       .pickrow { margin:4px 0 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
       .pickrow button { padding:4px 10px; font-size:12px; }
       .btns { margin-top:12px; }
+      .seatimg img { display:block; max-width:100%; border-radius:6px; }
+      .seatimg .help { margin-top:4px; }
     </style>
     <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><button class="start primary" type="button" hidden>예약 대기 시작</button><span class="ask" hidden><button class="wait1" type="button">1분 더 기다리기</button><button class="cut" type="button">끊고 새로 요청</button></span><button class="stop" type="button" hidden>중지</button><button class="gear" type="button">설정</button></div>
     <form class="panel" hidden></form>`;
@@ -166,6 +168,16 @@
         : `<input id="${id}" type="${{ number: 'number', datetime: 'datetime-local', date: 'date' }[f.type] || 'text'}" ${f.type === 'datetime' ? 'step="1"' : ''} ${f.type === 'phone' ? 'inputmode="tel"' : ''}>`;
       grid.insertAdjacentHTML('beforeend', `<label class="f span${f.w || 1}"><span>${f.label}${f.required ? ' <b>*</b>' : ''}</span>${input}${help}</label>`);
       ui.getElementById(id).value = toText(f, c[f.key]);
+      if (f.key === 'seatGroups') {
+        // 좌석 그룹 칸 옆에 그 배의 자리배치도 그림
+        grid.insertAdjacentHTML('beforeend', '<div class="span2 seatimg"><p class="help">자리배치도를 찾는 중…</p></div>');
+        const cell = grid.querySelector('.seatimg');
+        findSeatImg().then((src) => {
+          cell.innerHTML = src
+            ? `<a href="${src}" target="_blank" rel="noopener" title="크게 보기"><img src="${src}" alt="자리배치도"></a><p class="help">자리배치도 (그림을 누르면 크게 보기). 이 번호로 좌석 그룹을 적으세요.</p>`
+            : '<p class="help">이 배는 자리배치도가 없습니다. 좌석 선택이 없는 배이거나, 설정의 배 이름·출조일로 예약 화면을 찾지 못했습니다.</p>';
+        }).catch(() => { cell.innerHTML = '<p class="help">자리배치도를 가져오지 못했습니다.</p>'; });
+      }
     }
     panel.insertAdjacentHTML('beforeend', `<div class="btns"><button type="button" class="close">닫기</button><button type="submit" class="primary">저장하고 새로고침</button></div>`);
     panel.querySelector('.close').onclick = () => { panel.hidden = true; };
@@ -173,6 +185,31 @@
     panel.hidden = false;
     placePanel();
   }
+  // 자리배치도 그림 주소 찾기: 예약 화면이면 이 화면에서, 아니면 설정의 배 이름으로 그 배의 예약 화면을 받아 봄
+  // (받아 보기만 하므로 예약은 생기지 않음). 배치도는 배마다 고정이라 배 이름별로 기억
+  const SEATIMG_KEY = 'fishingReserv.ss24SeatImg';
+  async function findSeatImg() {
+    const here = document.querySelector('.arrange_seating_wrap img');
+    if (here) return here.src;
+    const cfg = loadConfig();
+    const names = [].concat(cfg.shipName || []).filter(Boolean);
+    const key = names.join('|') || '(첫 번째 배)';
+    let cache = {};
+    try { cache = JSON.parse(localStorage.getItem(SEATIMG_KEY) || '{}'); } catch (e) { /* 무시 */ }
+    if (key in cache) return cache[key];
+    const pickBtn = (doc) => [...doc.querySelectorAll('button.btn_user_reservation[data-schedule_no]')].find((b) =>
+      b.dataset.ship_status_code !== 'END_READY' && (!names.length || names.some((n) => (b.closest('td.ship_info')?.textContent || '').includes(n))));
+    let btn = pickBtn(document);
+    if (!btn && cfg.date) btn = pickBtn(new DOMParser().parseFromString(await fetch(`/ship/schedule_fleet/${cfg.date.slice(0, 7).replace('-', '')}`).then((r) => r.text()), 'text/html'));
+    const url = btn && reserveUrl(btn);
+    if (!url) return null; // 예약 화면을 못 찾음 (기억하지 않음)
+    const doc = new DOMParser().parseFromString(await fetch(url, { cache: 'no-store' }).then((r) => r.text()), 'text/html');
+    const src = doc.querySelector('.arrange_seating_wrap img')?.getAttribute('src') || '';
+    cache[key] = src;
+    try { localStorage.setItem(SEATIMG_KEY, JSON.stringify(cache)); } catch (e) { /* 무시 */ }
+    return src;
+  }
+
   panel.addEventListener('submit', (e) => {
     e.preventDefault();
     try {

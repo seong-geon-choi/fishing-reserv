@@ -27,6 +27,13 @@
     grid.insertAdjacentHTML('beforeend', `<label class="f span${f.w || 1}"><span>${f.label}${f.required ? ' <b>*</b>' : ''}</span>${input}${help}</label>`);
     ui.getElementById(id).value = toText(f, c[f.key]);
   }
+  // 지금은 쓰이지 않는 칸: 입력을 막고 이유를 칸 아래에 표시 (저장할 때도 읽지 않음)
+  function disableField(key, why) {
+    const el = ui.getElementById('f_' + key);
+    if (!el) return;
+    el.disabled = true;
+    el.closest('label').insertAdjacentHTML('beforeend', `<span class="help">${why}</span>`);
+  }
   // 설정 창 아래 버튼을 붙이고 보이기
   function showPanel() {
     panel.insertAdjacentHTML('beforeend', `<div class="btns"><button type="button" class="close">닫기</button><button type="submit" class="primary">저장하고 새로고침</button></div>`);

@@ -40,13 +40,13 @@
   };
   const FIELDS = [
     { key: 'date', w: 1, label: '출조일', type: 'date', help: '목록 페이지에서 시작할 때 사용' },
-    { key: 'shipName', w: 3, label: '배 이름', type: 'list', help: '이름 일부, 쉼표로 여러 개 (예: 만석호)' },
+    { key: 'shipName', w: 2, label: '배 이름', type: 'list', help: '이름 일부, 쉼표로 여러 개 (예: 만석호)' },
+    { key: 'fishKeywords', w: 1, perShip: true, label: '낚시종류 키워드', type: 'list', help: '쉼표로 구분. 하나라도 들어간 맨 위 종류(비우면 첫 번째). 배마다 따로 저장' },
     { key: 'people', w: 1, label: '예약 인원', type: 'number', min: 1, max: 30 },
     { key: 'name', w: 1, label: '예약자명', type: 'text', required: true },
     { key: 'depositor', w: 1, label: '입금자명', type: 'text', help: '예약자와 다를 때만' },
     { key: 'tel', w: 1, label: '휴대폰 번호', type: 'phone', required: true, help: '010-1234-5678' },
 //@@include fields_partial.js
-    { key: 'fishKeywords', w: 2, perShip: true, label: '낚시종류 키워드', type: 'list', help: '쉼표로 구분. 하나라도 들어간 맨 위 종류, 비우면 첫 번째' },
     { key: 'seatGroups', w: 2, perShip: true, label: '좌석 그룹', type: 'groups', help: '한 줄에 그룹 하나 (예: 7, 8, 9), 위쪽이 우선' },
     { key: 'fallbackAnySeat', w: 4, perShip: true, label: '그룹으로 인원을 못 채우면 남은 좌석으로 채우기', type: 'check' },
     { key: 'openAt', w: 2, label: '예약 오픈 시각', type: 'datetime', help: '비우면 시작하자마자 확인' },
@@ -156,11 +156,17 @@
     const grid = panelTop(note);
     let shipHeadDone = false;
     for (const f of FIELDS) {
+      if (f.key === 'fishKeywords') {
+        // 배 이름 옆에 두지만 값은 그 배 전용. 배를 모르면 입력할 수 없음
+        addField(grid, f, c);
+        if (!ship) disableField(f.key, '배 이름을 저장하면 그 배의 키워드를 입력할 수 있습니다');
+        continue;
+      }
       if (f.perShip && !shipHeadDone) {
         shipHeadDone = true;
         grid.insertAdjacentHTML('beforeend', ship
           ? `<h3 class="shiphead full">${ship.name} 전용 설정</h3><p class="help shipnote full">아래 항목은 이 배에만 적용됩니다. 같은 사이트의 다른 배는 따로 정합니다.</p>`
-          : `<h3 class="shiphead full">배별 설정 (낚시종류·좌석)</h3><p class="help shipnote full">배 이름을 입력하고 저장하면, 그 배의 낚시종류·좌석 설정이 여기에 나타납니다.</p>`);
+          : `<h3 class="shiphead full">배별 설정 (좌석)</h3><p class="help shipnote full">배 이름을 입력하고 저장하면, 그 배의 좌석 설정이 여기에 나타납니다.</p>`);
       }
       if (f.perShip && !ship) continue;
       addField(grid, f, c);
@@ -541,8 +547,9 @@
   // 낚시종류 고르기: 키워드가 하나라도 들어간 종류 중 맨 위, 없으면 첫 번째
   function pickFish(radios) {
     const usable = radios.filter((r) => !r.disabled);
-    return usable.find((r) => CONFIG.fishKeywords.some((k) => (r.closest('tr')?.textContent || '').includes(k))) || usable[0];
+    return fishByKeyword(usable, (r) => r.closest('tr')?.textContent || '') || usable[0];
   }
+//@@include fish.js
   // 낚시종류가 선택된 예약 화면 주소 (사이트의 ps_url(date, PA, PH, PS)과 같은 주소)
   function fishUrl(radio) {
     const m = (radio.getAttribute('onclick') || '').match(/ps_url\('(\d+)',\s*'(\d+)',\s*'(\d*)',\s*'(\d+)'\)/);

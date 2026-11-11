@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.14.1111-163355
+// @version      2.5.15.1111-164009
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -19,13 +19,14 @@
   // 값은 코드가 아니라 화면 위 "설정" 버튼에서 입력합니다. 이 사이트(주소)별로 브라우저에 저장되고, 스크립트가 업데이트돼도 유지됩니다.
   const STORE_KEY = 'fishingReserv.sunsang24';
   const DEFAULTS = {
-    date: '', shipName: [], people: 2, name: '', depositor: '', phone: ['', '', ''],
+    date: '', shipName: [], fishKeywords: [], people: 2, name: '', depositor: '', phone: ['', '', ''],
     seatGroups: [], fallbackAnySeat: true, partialSeats: false, minPeople: 1,
     openAt: '', startBeforeSec: 30, pollMs: 1000, autoSubmit: false,
   };
   const FIELDS = [
     { key: 'date', w: 1, label: '출조일', type: 'date', required: true },
-    { key: 'shipName', w: 3, label: '배 이름', type: 'list', help: '이름 일부, 쉼표로 여러 개 (예: 가가호). 여러 배가 나오는 사이트는 꼭 입력' },
+    { key: 'shipName', w: 2, label: '배 이름', type: 'list', help: '이름 일부, 쉼표로 여러 개 (예: 가가호). 여러 배가 나오는 사이트는 꼭 입력' },
+    { key: 'fishKeywords', w: 1, label: '낚시종류 키워드', type: 'list', help: '선택출항 예약만. 쉼표로 구분, 하나라도 들어간 맨 위 종류(없으면 화면 선택 그대로)' },
     { key: 'people', w: 1, label: '예약 인원', type: 'number', min: 1, max: 30 },
     { key: 'name', w: 1, label: '예약자명', type: 'text', help: '비우면 화면 값 사용' },
     { key: 'depositor', w: 1, label: '입금자명', type: 'text', help: '칸이 있는 배만' },
@@ -220,6 +221,13 @@
     grid.insertAdjacentHTML('beforeend', `<label class="f span${f.w || 1}"><span>${f.label}${f.required ? ' <b>*</b>' : ''}</span>${input}${help}</label>`);
     ui.getElementById(id).value = toText(f, c[f.key]);
   }
+  // 지금은 쓰이지 않는 칸: 입력을 막고 이유를 칸 아래에 표시 (저장할 때도 읽지 않음)
+  function disableField(key, why) {
+    const el = ui.getElementById('f_' + key);
+    if (!el) return;
+    el.disabled = true;
+    el.closest('label').insertAdjacentHTML('beforeend', `<span class="help">${why}</span>`);
+  }
   // 설정 창 아래 버튼을 붙이고 보이기
   function showPanel() {
     panel.insertAdjacentHTML('beforeend', `<div class="btns"><button type="button" class="close">닫기</button><button type="submit" class="primary">저장하고 새로고침</button></div>`);
@@ -233,6 +241,12 @@
     const grid = panelTop(note);
     for (const f of FIELDS) {
       addField(grid, f, c);
+      if (f.key === 'fishKeywords') {
+        // 낚시종류 선택은 선택출항 예약에만 있음: 설정한 날짜·배가 일반 예약이면 칸을 막음 (아직 일정에 없으면 그대로 둠)
+        reserveKind().then((kind) => {
+          if (kind === 'normal') disableField('fishKeywords', '설정한 날짜·배는 일반 예약이라 낚시종류 선택이 없습니다');
+        }).catch(() => {});
+      }
       if (f.key === 'seatGroups') {
         // 좌석 그룹 칸 옆에 그 배의 자리배치도 그림
         grid.insertAdjacentHTML('beforeend', '<div class="span2 seatimg"><p class="help">자리배치도를 찾는 중…</p></div>');
@@ -248,6 +262,18 @@
   }
   // 자리배치도 그림 주소 찾기: 예약 화면이면 이 화면에서, 아니면 설정의 배 이름으로 그 배의 예약 화면을 받아 봄
   // (받아 보기만 하므로 예약은 생기지 않음). 배치도는 배마다 고정이라 배 이름별로 기억
+  // 설정한 날짜·배의 예약 종류: 'default'(선택출항, 낚시종류를 고름) / 'normal'(일반) / null(아직 일정에 없어 모름)
+  async function reserveKind() {
+    if (/^\/mypage\/reservation_default_ready\//.test(location.pathname)) return 'default';
+    if (/^\/mypage\/reservation_ready\//.test(location.pathname)) return 'normal';
+    const cfg = loadConfig();
+    if (!cfg.date) return null;
+    const ymOf = cfg.date.slice(0, 7).replace('-', '');
+    const doc = location.pathname.endsWith(ymOf) ? document
+      : new DOMParser().parseFromString(await fetch(`/ship/schedule_fleet/${ymOf}`).then((r) => r.text()), 'text/html');
+    const url = findSchedule(doc);
+    return !url ? null : url.includes('reservation_default_ready') ? 'default' : 'normal';
+  }
   const SEATIMG_KEY = 'fishingReserv.ss24SeatImg';
   async function findSeatImg() {
     const here = document.querySelector('.arrange_seating_wrap img');
@@ -530,6 +556,10 @@
     toast(`${why}. 자동 신청하지 않습니다. 화면을 확인하고 직접 정하세요.`);
     return 0;
   }
+  // 낚시종류 고르기: 키워드가 하나라도 들어간 종류 중 맨 위 (없으면 null). textOf: 그 종류의 화면 글자
+  function fishByKeyword(items, textOf) {
+    return items.find((it) => CONFIG.fishKeywords.some((k) => textOf(it).includes(k))) || null;
+  }
 
   // 이 예약 화면에서 한 번에 예약할 수 있는 최대 인원. 사이트의 + 버튼이 확인하는 세 값 중 가장 작은 값
   // (남은 승선 인원, 1인 최대 예약 인원, 가격 옵션의 최대 인원. 뒤의 둘은 0이면 제한 없음)
@@ -551,6 +581,16 @@
     if (!btn) {
       status('선상24에 로그인되어 있지 않습니다. 로그인한 뒤 이 화면을 새로고침하세요.');
       return;
+    }
+
+    // 선택출항 예약: 낚시종류 고르기 (가격·최대 인원이 종류에 따라 달라질 수 있어 인원보다 먼저)
+    // 키워드가 들어간 맨 위 종류, 없으면 화면에 선택된 종류 그대로
+    const fishRadios = [...document.querySelectorAll('input[name="default_schedule_no"]')].filter((r) => !r.disabled);
+    const fishText = (r) => (r.parentElement?.parentElement?.textContent || '').replace(/\s+/g, ' ').trim();
+    if (fishRadios.length && CONFIG.fishKeywords.length) {
+      const fish = fishByKeyword(fishRadios, fishText);
+      if (!fish) toast(`낚시종류 키워드(${CONFIG.fishKeywords.join(', ')})에 맞는 종류가 없어 화면에 선택된 종류로 진행합니다`);
+      else if (!fish.checked) { fish.click(); await sleep(200); }
     }
 
     // 인원: +/− 버튼을 눌러 맞춤. 최대 인원을 넘겨 누르면 사이트가 경고창을 띄워 멈추므로, 최대 인원을 먼저 알아내 그 이상은 누르지 않음
@@ -609,7 +649,8 @@
     if (!peopleOk) notes.push(`예약 가능한 인원이 ${allowed}명이라 설정 인원(${CONFIG.people}명)을 채우지 못해 자동 신청하지 않았습니다`);
     if (mismatch) notes.push(`인원이 ${allowed}명으로 맞춰지지 않았습니다(지금 ${count()}명)`);
     if (seatsShort) notes.push(`좌석이 ${seatPicks.length}석만 골라졌습니다. 인원(${people}명)만큼 직접 골라 주세요`);
-    const summary = `인원 ${people}명${seatBoxes.length ? (seatPicks.length ? `, 좌석 ${seatPicks.join(', ')}번` : ', 좌석 없음') : ''}, 예약자 ${document.querySelector('input[name=name]')?.value || '(비어 있음)'}`;
+    const fishNow = fishRadios.find((r) => r.checked);
+    const summary = `${fishNow ? `낚시종류 ${fishText(fishNow)}, ` : ''}인원 ${people}명${seatBoxes.length ? (seatPicks.length ? `, 좌석 ${seatPicks.join(', ')}번` : ', 좌석 없음') : ''}, 예약자 ${document.querySelector('input[name=name]')?.value || '(비어 있음)'}`;
 
     if (!CONFIG.autoSubmit || !fromScript || short || seatsShort || mismatch) {
       const why = CONFIG.autoSubmit && !fromScript ? ' (직접 연 화면이라 자동 신청은 하지 않습니다)' : '';

@@ -15,6 +15,16 @@
 (function () {
   'use strict';
 
+  // 예약 화면은 일정 페이지에서 "예약 대기 시작"으로 넘어온 경우(이 탭에 시작 표시가 있을 때)만 동작.
+  // 사이트의 "바로예약"으로 직접 연 예약 화면에서는 아무것도 표시하지 않음 (설정은 일정 페이지에서, 더피싱과 같음)
+  const FLAG = 'ss24_auto_schedule'; // 이 스크립트가 예약 화면으로 보냈다는 표시 (이 탭 안에서만)
+  const isReserve = /^\/mypage\/reservation_(default_)?ready\//.test(location.pathname);
+  if (isReserve) {
+    let fromScript = false;
+    try { fromScript = sessionStorage.getItem(FLAG) === location.pathname; sessionStorage.removeItem(FLAG); } catch (e) { /* 무시 */ }
+    if (!fromScript) return;
+  }
+
   // ===================== 설정 항목 =====================
   // 값은 코드가 아니라 화면 위 "설정" 버튼에서 입력합니다. 이 사이트(주소)별로 브라우저에 저장되고, 스크립트가 업데이트돼도 유지됩니다.
   const STORE_KEY = 'fishingReserv.sunsang24';
@@ -143,7 +153,6 @@
   const [Y, M, D] = CONFIG.date.split('-').map(Number);
   const shipNames = [].concat(CONFIG.shipName || []).filter(Boolean);
   const ym = `${Y}${String(M).padStart(2, '0')}`;
-  const FLAG = 'ss24_auto_schedule'; // 이 스크립트가 예약 화면으로 보냈다는 표시
 
   // 일정 페이지 HTML에서 원하는 날짜의 "바로예약" 일정번호 찾기
   // 사이트의 "바로예약" 버튼과 같은 규칙: 일정번호가 있으면 일반 예약, 0이면 선택출항 예약(날짜/배번호)
@@ -249,8 +258,8 @@
   }
 
   // 2) 예약 화면: 인원 → 예약자 → 약관 동의 → (autoSubmit) 예약하기
-  // fromScript: 일정 페이지에서 "예약 대기 시작"으로 들어온 경우만 true (자동 신청은 이때만)
-  async function fillReservation(fromScript) {
+  // 일정 페이지에서 "예약 대기 시작"으로 들어온 경우만 여기까지 옴 (맨 위에서 확인)
+  async function fillReservation() {
     const btn = document.getElementById('btn_payment');
     if (!btn) {
       status('선상24에 로그인되어 있지 않습니다. 로그인한 뒤 이 화면을 새로고침하세요.');
@@ -326,9 +335,8 @@
     const fishNow = fishRadios.find((r) => r.checked);
     const summary = `${fishNow ? `낚시종류 ${fishText(fishNow)}, ` : ''}인원 ${people}명${seatBoxes.length ? (seatPicks.length ? `, 좌석 ${seatPicks.join(', ')}번` : ', 좌석 없음') : ''}, 예약자 ${document.querySelector('input[name=name]')?.value || '(비어 있음)'}`;
 
-    if (!CONFIG.autoSubmit || !fromScript || short || seatsShort || mismatch) {
-      const why = CONFIG.autoSubmit && !fromScript ? ' (직접 연 화면이라 자동 신청은 하지 않습니다)' : '';
-      status(`입력 완료: ${summary}. ${notes.join(', ')}${notes.length ? '. ' : ''}내용을 확인하고 빨간 테두리 "예약하기"를 누르세요.${why}`);
+    if (!CONFIG.autoSubmit || short || seatsShort || mismatch) {
+      status(`입력 완료: ${summary}. ${notes.join(', ')}${notes.length ? '. ' : ''}내용을 확인하고 빨간 테두리 "예약하기"를 누르세요.`);
       return;
     }
 
@@ -352,26 +360,15 @@
     return;
   }
 
-  if (/^\/mypage\/reservation_(default_)?ready\//.test(location.pathname)) {
-    const scheduleNo = location.pathname; // 이 스크립트가 보낸 예약 화면 주소와 비교
-    let fromScript = false;
-    try { fromScript = sessionStorage.getItem(FLAG) === scheduleNo; sessionStorage.removeItem(FLAG); } catch (e) { /* 무시 */ }
+  if (isReserve) {
+    // 여기까지 오면 "예약 대기 시작"으로 넘어온 화면 (맨 위에서 확인)
     const loggedOut = !document.getElementById('btn_payment') && document.querySelector('.btn_payment');
-    if (fromScript && document.getElementById('btn_payment')) fillReservation(true);
-    else if (fromScript && !loggedOut) {
-      // 혼잡으로 예약 화면이 제대로 안 열림 → 시작 표시를 다시 남기고 잠시 뒤 다시 열기 (다시 열리면 이어서 진행)
-      stopBtn.onclick = () => { stopped = true; stopBtn.hidden = true; status('다시 열기를 중지했습니다. 예약 화면을 직접 새로고침하면 "자동입력 시작" 버튼이 나옵니다.'); };
-      reloadSoon('예약 화면이 제대로 열리지 않았습니다.', () => { try { sessionStorage.setItem(FLAG, scheduleNo); } catch (e) { /* 무시 */ } });
-    }
+    if (document.getElementById('btn_payment')) fillReservation();
     else if (loggedOut) status(LOGIN_MSG);
-    else if (!document.getElementById('btn_payment')) status('예약 화면이 제대로 열리지 않았습니다. 새로고침(F5)하세요.');
     else {
-      // 사이트의 "바로예약"으로 직접 연 화면: 버튼을 눌러야 입력 (설정을 먼저 확인·변경할 수 있게, 자동 신청은 하지 않음)
-      status('이 예약 화면에서 자동입력을 하려면 "자동입력 시작"을 누르세요. 먼저 설정을 확인할 수 있습니다.');
-      const b = ui.querySelector('.start');
-      b.textContent = '자동입력 시작';
-      b.hidden = false;
-      b.onclick = () => { b.hidden = true; panel.hidden = true; fillReservation(false); };
+      // 혼잡으로 예약 화면이 제대로 안 열림 → 시작 표시를 다시 남기고 잠시 뒤 다시 열기 (다시 열리면 이어서 진행)
+      stopBtn.onclick = () => { stopped = true; stopBtn.hidden = true; status('다시 열기를 중지했습니다. 다시 하려면 일정 페이지에서 "예약 대기 시작"을 누르세요.'); };
+      reloadSoon('예약 화면이 제대로 열리지 않았습니다.', () => { try { sessionStorage.setItem(FLAG, location.pathname); } catch (e) { /* 무시 */ } });
     }
   }
   else showStart();

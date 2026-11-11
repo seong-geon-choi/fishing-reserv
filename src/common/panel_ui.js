@@ -13,7 +13,7 @@
     const id = 'f_' + f.key;
     const help = f.help ? `<span class="help">${f.help}</span>` : '';
     if (f.type === 'check') {
-      grid.insertAdjacentHTML('beforeend', `<label class="c span4 ${f.danger ? 'danger' : ''}"><input type="checkbox" id="${id}" ${c[f.key] ? 'checked' : ''}><span>${f.label}${f.danger ? `<span class="help danger">${f.danger}</span>` : help}</span></label>`);
+      grid.insertAdjacentHTML('beforeend', `<label class="c span${f.w || 4} ${f.danger ? 'danger' : ''}"><input type="checkbox" id="${id}" ${c[f.key] ? 'checked' : ''}><span>${f.label}${f.danger ? `<span class="help danger">${f.danger}</span>` : help}</span></label>`);
       return;
     }
     const input = f.type === 'groups' ? `<textarea id="${id}"></textarea>`

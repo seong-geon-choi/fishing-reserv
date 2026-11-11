@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.7.1.1111-101417
+// @version      2.7.2.1111-104327
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -209,8 +209,8 @@
           <p class="pp-legend"><i class="lg free"></i>빈 좌석 <i class="lg taken"></i>그 날 이미 예약됨 (좌석 그룹에는 넣을 수 있음)</p></div>
         <div class="pp-side">
           <ol class="pp-steps">
-            <li>같이 앉고 싶은 좌석을 <b>원하는 순서대로</b> 누르세요.</li>
-            <li>다른 후보가 있으면 <b>+ 다음 후보 그룹 추가</b> 후 이어서 고르세요.</li>
+            <li>같이 앉고 싶은 좌석을 <b>원하는 순서대로</b> 누르세요. 다시 누르면 지금 그룹에서 빠집니다.</li>
+            <li>다른 후보가 있으면 <b>+ 다음 후보 그룹 추가</b> 후 이어서 고르세요. <b>같은 좌석을 여러 그룹에 넣어도 됩니다.</b></li>
             <li>다 고르면 <b>완료</b>를 누르세요.</li>
           </ol>
           <p class="pp-hint"></p>
@@ -438,14 +438,18 @@
       <text x="150" y="157" text-anchor="middle" font-size="14" fill="#52606d">◀ 선수</text><text x="862" y="157" text-anchor="middle" font-size="14" fill="#52606d">선미</text>`;
     for (const st of pick.seats) {
       const [x, y] = SLOT[st.slot];
-      const gi = pick.groups.findIndex((g) => g.includes(st.n));
+      // 같은 좌석이 여러 그룹에 있을 수 있음: 지금 고르는 그룹을 우선 표시, 다른 그룹에만 있으면 점선 테두리
+      const inActive = (pick.groups[pick.active] || []).includes(st.n);
+      const gi = inActive ? pick.active : pick.groups.findIndex((g) => g.includes(st.n));
+      const others = pick.groups.filter((g, i) => i !== gi && g.includes(st.n)).length;
       const g = document.createElementNS(NS, 'g');
       g.setAttribute('class', 'seat');
       g.dataset.n = st.n;
       const color = gi >= 0 ? gColor(gi) : '#8396a6';
-      g.innerHTML = `<rect x="${x}" y="${y}" width="32" height="32" rx="7" fill="${st.taken ? '#c3ccd5' : '#fff'}" stroke="${color}" stroke-width="${gi >= 0 ? 4 : 2}"/>
+      g.innerHTML = `<rect x="${x}" y="${y}" width="32" height="32" rx="7" fill="${st.taken ? '#c3ccd5' : '#fff'}" stroke="${color}" stroke-width="${gi >= 0 ? 4 : 2}" ${gi >= 0 && !inActive ? 'stroke-dasharray="5 3"' : ''}/>
         <text x="${x + 16}" y="${y + 22}" text-anchor="middle" font-size="16" font-weight="600" fill="${st.taken ? '#fff' : '#1f2933'}">${st.n}</text>`
-        + (gi >= 0 ? `<circle cx="${x + 32}" cy="${y}" r="10" fill="${color}"/><text x="${x + 32}" y="${y + 4}" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">${pick.groups[gi].indexOf(st.n) + 1}</text>` : '');
+        + (gi >= 0 ? `<circle cx="${x + 32}" cy="${y}" r="10" fill="${color}" ${inActive ? '' : 'opacity="0.6"'}/><text x="${x + 32}" y="${y + 4}" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">${pick.groups[gi].indexOf(st.n) + 1}</text>` : '')
+        + (others ? `<text x="${x - 1}" y="${y + 42}" font-size="10" font-weight="700" fill="#52606d">+${others}그룹</text>` : '');
       svg.appendChild(g);
     }
   }
@@ -487,14 +491,15 @@
     if (pick) renderPick();
   }
 
-  // 배 그림의 좌석 누르기: 없으면 지금 그룹에 추가, 이미 있으면 빼기
+  // 배 그림의 좌석 누르기: "지금 고르는 중"인 그룹 기준으로만 판단
+  // 그 그룹에 없으면 추가(다른 그룹에 있어도 추가 → 그룹끼리 겹쳐도 됨), 이미 있으면 그 그룹에서만 빼기
   svg.addEventListener('click', (e) => {
     const g = e.target.closest('.seat');
     if (!g || !pick) return;
     const n = +g.dataset.n;
-    const gi = pick.groups.findIndex((x) => x.includes(n));
-    if (gi >= 0) pick.groups[gi].splice(pick.groups[gi].indexOf(n), 1);
-    else pick.groups[pick.active].push(n);
+    const cur = pick.groups[pick.active];
+    if (cur.includes(n)) cur.splice(cur.indexOf(n), 1);
+    else cur.push(n);
     renderPick();
   });
 

@@ -593,15 +593,20 @@
   async function fillForm() {
     // 좌석이 있는 배인지: 좌석판에 번호 칸이 있으면 (빈 좌석이 0개여도)
     const seatShip = [...document.querySelectorAll('.res_ship_seat [class*="res_seat"] span')].some((s) => /^\d+$/.test(s.textContent.trim()));
-    // 지금 빈 좌석 (화면 순서)
-    const freeSeats = [...document.querySelectorAll(`span[id^="c${date}${pa}"].res_num_view[onclick]`)].map((el) => Number(el.id.slice(`c${date}${pa}`.length)));
+    // 지금 고를 수 있는 좌석 (화면 순서). 이 브라우저에서 이미 눌러 둔 좌석(res_num_view_chosen: 다시 열린 화면 등)도 포함
+    const seatSpans = [...document.querySelectorAll(`span[id^="c${date}${pa}"][onclick]`)].filter((el) => /\bres_num_view(_chosen)?\b/.test(el.className));
+    const seatNo = (el) => Number(el.id.slice(`c${date}${pa}`.length));
+    const freeSeats = seatSpans.map(seatNo);
+    const chosen = seatSpans.filter((el) => el.classList.contains('res_num_view_chosen')).map(seatNo);
     let picks = [];
     let short = false; // 좌석이 모자라 자동 신청하지 않음
     if (seatShip) {
       picks = pickSeats(freeSeats, CONFIG.people);
       short = !seatShortage(picks.length, CONFIG.people);
-      // 좌석을 누른 수만큼 인원이 정해짐 (남은 좌석만큼만 예약이면 그 인원으로)
-      for (const n of picks) { window.ticket_seat_click(date, pa, String(n)); await sleep(250); }
+      // 좌석을 누른 수만큼 인원이 정해짐 (남은 좌석만큼만 예약이면 그 인원으로).
+      // 누를 때마다 선택/해제가 바뀌므로, 이미 눌러 둔 좌석은 고른 것만 두고 풀고, 나머지 고른 좌석만 누름
+      const toggle = [...chosen.filter((n) => !picks.includes(n)), ...picks.filter((n) => !chosen.includes(n))];
+      for (const n of toggle) { window.ticket_seat_click(date, pa, String(n)); await sleep(250); }
     } else {
       // 좌석지정이 없는 배/종류인 경우 인원만 선택
       document.getElementById('BI_IN').value = String(CONFIG.people);

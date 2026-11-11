@@ -27,12 +27,15 @@
     grid.insertAdjacentHTML('beforeend', `<label class="f span${f.w || 1}"><span>${f.label}${f.required ? ' <b>*</b>' : ''}</span>${input}${help}</label>`);
     ui.getElementById(id).value = toText(f, c[f.key]);
   }
-  // 지금은 쓰이지 않는 칸: 입력을 막고 이유를 칸 아래에 표시 (저장할 때도 읽지 않음)
-  function disableField(key, why) {
+  // 지금은 쓰이지 않는 칸: 입력을 막고(회색) 이유를 칸 아래에 표시, 누르면 tip을 토스트로.
+  // disabled는 브라우저가 클릭을 무시해 안내를 띄울 수 없으므로 읽기 전용으로 (값은 바뀌지 않은 채 저장됨)
+  function disableField(key, why, tip) {
     const el = ui.getElementById('f_' + key);
     if (!el) return;
-    el.disabled = true;
+    el.readOnly = true;
+    el.classList.add('off');
     el.closest('label').insertAdjacentHTML('beforeend', `<span class="help">${why}</span>`);
+    el.addEventListener('click', () => toast(tip || why));
   }
   // 설정 창 아래 버튼을 붙이고 보이기
   function showPanel() {

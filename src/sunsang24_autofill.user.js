@@ -68,7 +68,8 @@
       if (f.key === 'fishKeywords') {
         // 낚시종류 선택은 선택출항 예약에만 있음: 설정한 날짜·배가 일반 예약이면 칸을 막음 (아직 일정에 없으면 그대로 둠)
         reserveKind().then((kind) => {
-          if (kind === 'normal') disableField('fishKeywords', '설정한 날짜·배는 일반 예약이라 낚시종류 선택이 없습니다');
+          if (kind === 'normal') disableField('fishKeywords', '설정한 날짜·배는 일반 예약이라 낚시종류 선택이 없습니다',
+            '어종 선택은 선사 고정입니다. 낚시종류 키워드는 선택출항 예약에서만 쓰입니다.');
         }).catch(() => {});
       }
       if (f.key === 'seatGroups') {

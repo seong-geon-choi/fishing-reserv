@@ -159,7 +159,8 @@
       if (f.key === 'fishKeywords') {
         // 배 이름 옆에 두지만 값은 그 배 전용. 배를 모르면 입력할 수 없음
         addField(grid, f, c);
-        if (!ship) disableField(f.key, '배 이름을 저장하면 그 배의 키워드를 입력할 수 있습니다');
+        if (!ship) disableField(f.key, '배 이름을 저장하면 그 배의 키워드를 입력할 수 있습니다',
+          '배 이름을 먼저 저장하세요. 낚시종류 키워드는 배마다 따로 저장됩니다.');
         continue;
       }
       if (f.perShip && !shipHeadDone) {

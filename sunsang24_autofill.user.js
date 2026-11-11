@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.16.1111-164100
+// @version      2.5.17.1111-164747
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -150,6 +150,7 @@
       .btns { margin-top:12px; }
       label.c .inl { margin-left:auto; display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
       label.c .inl input { width:64px; }
+      input.off { background:#eef1f4; color:#8396a6; cursor:not-allowed; }
       .seatimg img { display:block; max-width:100%; border-radius:6px; }
       .seatimg .help { margin-top:4px; }
     </style>
@@ -169,6 +170,7 @@
   ui.appendChild($toasts);
   function toast(m, ms = 14000) {
     console.log('[자동입력]', m);
+    if ([...$toasts.children].some((t) => t.textContent === m && t.style.opacity !== '0')) return; // 같은 안내가 떠 있으면 쌓지 않음
     $toasts.style.top = $bar.offsetHeight + 8 + 'px';
     const t = document.createElement('div');
     t.className = 'toast';
@@ -221,12 +223,15 @@
     grid.insertAdjacentHTML('beforeend', `<label class="f span${f.w || 1}"><span>${f.label}${f.required ? ' <b>*</b>' : ''}</span>${input}${help}</label>`);
     ui.getElementById(id).value = toText(f, c[f.key]);
   }
-  // 지금은 쓰이지 않는 칸: 입력을 막고 이유를 칸 아래에 표시 (저장할 때도 읽지 않음)
-  function disableField(key, why) {
+  // 지금은 쓰이지 않는 칸: 입력을 막고(회색) 이유를 칸 아래에 표시, 누르면 tip을 토스트로.
+  // disabled는 브라우저가 클릭을 무시해 안내를 띄울 수 없으므로 읽기 전용으로 (값은 바뀌지 않은 채 저장됨)
+  function disableField(key, why, tip) {
     const el = ui.getElementById('f_' + key);
     if (!el) return;
-    el.disabled = true;
+    el.readOnly = true;
+    el.classList.add('off');
     el.closest('label').insertAdjacentHTML('beforeend', `<span class="help">${why}</span>`);
+    el.addEventListener('click', () => toast(tip || why));
   }
   // 설정 창 아래 버튼을 붙이고 보이기
   function showPanel() {
@@ -244,7 +249,8 @@
       if (f.key === 'fishKeywords') {
         // 낚시종류 선택은 선택출항 예약에만 있음: 설정한 날짜·배가 일반 예약이면 칸을 막음 (아직 일정에 없으면 그대로 둠)
         reserveKind().then((kind) => {
-          if (kind === 'normal') disableField('fishKeywords', '설정한 날짜·배는 일반 예약이라 낚시종류 선택이 없습니다');
+          if (kind === 'normal') disableField('fishKeywords', '설정한 날짜·배는 일반 예약이라 낚시종류 선택이 없습니다',
+            '어종 선택은 선사 고정입니다. 낚시종류 키워드는 선택출항 예약에서만 쓰입니다.');
         }).catch(() => {});
       }
       if (f.key === 'seatGroups') {

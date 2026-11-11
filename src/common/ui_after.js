@@ -11,6 +11,7 @@
   ui.appendChild($toasts);
   function toast(m, ms = 14000) {
     console.log('[자동입력]', m);
+    if ([...$toasts.children].some((t) => t.textContent === m && t.style.opacity !== '0')) return; // 같은 안내가 떠 있으면 쌓지 않음
     $toasts.style.top = $bar.offsetHeight + 8 + 'px';
     const t = document.createElement('div');
     t.className = 'toast';

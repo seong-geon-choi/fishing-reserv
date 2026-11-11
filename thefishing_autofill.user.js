@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.15.1111-164009
+// @version      2.8.16.1111-164747
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -179,6 +179,7 @@
       .btns { margin-top:12px; }
       label.c .inl { margin-left:auto; display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
       label.c .inl input { width:64px; }
+      input.off { background:#eef1f4; color:#8396a6; cursor:not-allowed; }
       .simlink { font-size:12px; font-weight:700; color:#1c6fb8; }
       .pickpanel { position:fixed; left:50%; top:52px; transform:translateX(-50%); width:min(1120px, calc(100vw - 16px)); max-height:calc(100vh - 60px); overflow:auto;
         background:#fff; color:#1f2933; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.3); padding:0 14px 12px; font-size:13px; font-weight:400; }
@@ -257,6 +258,7 @@
   ui.appendChild($toasts);
   function toast(m, ms = 14000) {
     console.log('[자동입력]', m);
+    if ([...$toasts.children].some((t) => t.textContent === m && t.style.opacity !== '0')) return; // 같은 안내가 떠 있으면 쌓지 않음
     $toasts.style.top = $bar.offsetHeight + 8 + 'px';
     const t = document.createElement('div');
     t.className = 'toast';
@@ -309,12 +311,15 @@
     grid.insertAdjacentHTML('beforeend', `<label class="f span${f.w || 1}"><span>${f.label}${f.required ? ' <b>*</b>' : ''}</span>${input}${help}</label>`);
     ui.getElementById(id).value = toText(f, c[f.key]);
   }
-  // 지금은 쓰이지 않는 칸: 입력을 막고 이유를 칸 아래에 표시 (저장할 때도 읽지 않음)
-  function disableField(key, why) {
+  // 지금은 쓰이지 않는 칸: 입력을 막고(회색) 이유를 칸 아래에 표시, 누르면 tip을 토스트로.
+  // disabled는 브라우저가 클릭을 무시해 안내를 띄울 수 없으므로 읽기 전용으로 (값은 바뀌지 않은 채 저장됨)
+  function disableField(key, why, tip) {
     const el = ui.getElementById('f_' + key);
     if (!el) return;
-    el.disabled = true;
+    el.readOnly = true;
+    el.classList.add('off');
     el.closest('label').insertAdjacentHTML('beforeend', `<span class="help">${why}</span>`);
+    el.addEventListener('click', () => toast(tip || why));
   }
   // 설정 창 아래 버튼을 붙이고 보이기
   function showPanel() {
@@ -335,7 +340,8 @@
       if (f.key === 'fishKeywords') {
         // 배 이름 옆에 두지만 값은 그 배 전용. 배를 모르면 입력할 수 없음
         addField(grid, f, c);
-        if (!ship) disableField(f.key, '배 이름을 저장하면 그 배의 키워드를 입력할 수 있습니다');
+        if (!ship) disableField(f.key, '배 이름을 저장하면 그 배의 키워드를 입력할 수 있습니다',
+          '배 이름을 먼저 저장하세요. 낚시종류 키워드는 배마다 따로 저장됩니다.');
         continue;
       }
       if (f.perShip && !shipHeadDone) {

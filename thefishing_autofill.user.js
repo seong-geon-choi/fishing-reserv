@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.1.1111-143411
+// @version      2.8.2.1111-144416
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -142,6 +142,32 @@
       h3.shiphead { margin:18px 0 2px; padding-top:12px; border-top:1px solid #d5dce2; font-size:15px; color:#1c6fb8; }
       .shipnote { margin:0 0 10px; }
       .pickrow { margin:-6px 0 12px; }
+      /* 떠 있는 설정 창 + 한 화면 격자 배치 */
+      .panel { position:fixed; margin:0; max-width:none; width:min(820px, calc(100vw - 16px)); max-height:calc(100vh - 16px); border-radius:10px; padding:0 16px 14px; }
+      .phead { display:flex; align-items:center; gap:8px; margin:0 -16px 8px; padding:9px 12px 9px 16px; background:#1f2933; color:#fff;
+        border-radius:10px 10px 0 0; cursor:move; user-select:none; touch-action:none; position:sticky; top:0; z-index:1; }
+      .phead b { font-size:15px; }
+      .phead .ver { color:#c9d3dc; }
+      .phead .grip { color:#9aa5b1; font-size:12px; font-weight:400; margin-left:auto; }
+      .phead .x { background:transparent; border:0; color:#fff; font-size:20px; line-height:1; padding:0 4px; cursor:pointer; }
+      .sub { margin:0 0 6px; font-size:12px; }
+      .err { margin:0 0 8px; }
+      .grid4 { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px 12px; align-items:start; }
+      .span1 { grid-column:span 1; } .span2 { grid-column:span 2; } .span3 { grid-column:span 3; } .span4, .full { grid-column:1 / -1; }
+      @media (max-width: 640px) { .grid4 { grid-template-columns:repeat(2, minmax(0, 1fr)); } .span3 { grid-column:1 / -1; } }
+      label.f { margin:0; min-width:0; }
+      label.f > span { font-size:13px; margin-bottom:2px; }
+      input[type=text], input[type=number], input[type=date], input[type=datetime-local], textarea { font-size:14px; padding:6px 8px; }
+      textarea { min-height:64px; }
+      label.c { margin:0; font-size:13px; align-items:center; }
+      label.c input { width:18px; height:18px; }
+      .help { font-size:11px; line-height:1.35; margin-top:2px; }
+      h3.shiphead { margin:6px 0 0; padding-top:8px; font-size:14px; }
+      .shipnote { margin:-4px 0 0; }
+      .pickrow { margin:4px 0 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+      .pickrow button { padding:4px 10px; font-size:12px; }
+      .btns { margin-top:12px; }
+      .simlink { font-size:12px; font-weight:700; color:#1c6fb8; }
       .pickpanel { position:fixed; left:50%; top:52px; transform:translateX(-50%); width:min(1120px, calc(100vw - 16px)); max-height:calc(100vh - 60px); overflow:auto;
         background:#fff; color:#1f2933; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.3); padding:0 14px 12px; font-size:13px; font-weight:400; }
       .pickpanel[hidden] { display:none; }
@@ -182,32 +208,6 @@
       .pp-warn { color:#b45309; font-size:11px; margin-top:3px; }
       .pp-add { width:100%; margin-bottom:8px; }
       .pp-btns { display:flex; gap:8px; justify-content:flex-end; }
-      /* 떠 있는 설정 창 + 한 화면 격자 배치 */
-      .panel { position:fixed; margin:0; max-width:none; width:min(820px, calc(100vw - 16px)); max-height:calc(100vh - 16px); border-radius:10px; padding:0 16px 14px; }
-      .phead { display:flex; align-items:center; gap:8px; margin:0 -16px 8px; padding:9px 12px 9px 16px; background:#1f2933; color:#fff;
-        border-radius:10px 10px 0 0; cursor:move; user-select:none; touch-action:none; position:sticky; top:0; z-index:1; }
-      .phead b { font-size:15px; }
-      .phead .ver { color:#c9d3dc; }
-      .phead .grip { color:#9aa5b1; font-size:12px; font-weight:400; margin-left:auto; }
-      .phead .x { background:transparent; border:0; color:#fff; font-size:20px; line-height:1; padding:0 4px; cursor:pointer; }
-      .sub { margin:0 0 6px; font-size:12px; }
-      .err { margin:0 0 8px; }
-      .grid4 { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px 12px; align-items:start; }
-      .span1 { grid-column:span 1; } .span2 { grid-column:span 2; } .span3 { grid-column:span 3; } .span4, .full { grid-column:1 / -1; }
-      @media (max-width: 640px) { .grid4 { grid-template-columns:repeat(2, minmax(0, 1fr)); } .span3 { grid-column:1 / -1; } }
-      label.f { margin:0; min-width:0; }
-      label.f > span { font-size:13px; margin-bottom:2px; }
-      input[type=text], input[type=number], input[type=date], input[type=datetime-local], textarea { font-size:14px; padding:6px 8px; }
-      textarea { min-height:64px; }
-      label.c { margin:0; font-size:13px; align-items:center; }
-      label.c input { width:18px; height:18px; }
-      .help { font-size:11px; line-height:1.35; margin-top:2px; }
-      h3.shiphead { margin:6px 0 0; padding-top:8px; font-size:14px; }
-      .shipnote { margin:-4px 0 0; }
-      .pickrow { margin:4px 0 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-      .pickrow button { padding:4px 10px; font-size:12px; }
-      .simlink { font-size:12px; font-weight:700; color:#1c6fb8; }
-      .btns { margin-top:12px; }
     </style>
     <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><button class="start primary" type="button" hidden>예약 대기 시작</button><span class="ask" hidden><button class="wait1" type="button">1분 더 기다리기</button><button class="cut" type="button">끊고 새로 요청</button></span><button class="stop" type="button" hidden>중지</button><button class="gear" type="button">설정</button></div>
     <form class="panel" hidden></form>
@@ -239,23 +239,45 @@
   const panel = ui.querySelector('.panel');
   const status = (m) => { $msg.textContent = m; console.log('[자동입력]', m); };
 
-  function openPanel(note) {
-    const ship = currentShip();
-    panel.dataset.shipId = ship ? ship.id : '';
-    const all = loadConfig();
-    const c = ship ? forShip(all, ship.id) : all;
-    // 버전 "2.5.1.1110-225502" (기본 버전.월일-시분초) → "버전 2.5.1 · 수정 11-10 22:55:02"
+  // 설정 창 머리 + 빈 입력 칸 격자. 버전 "2.3.1.1110-225502" (기본 버전.월일-시분초) → "버전 2.3.1 · 수정 11-10 22:55:02"
+  function panelTop(note) {
     const raw = typeof GM_info !== 'undefined' ? GM_info.script.version : '';
     const vm = raw.match(/^(\d+\.\d+\.\d+)\.(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/);
     const ver = !raw ? '' : vm ? `버전 ${vm[1]} · 수정 ${vm[2]}-${vm[3]} ${vm[4]}:${vm[5]}:${vm[6]}` : `버전 ${raw}`;
     panel.innerHTML = `<div class="phead" title="끌어서 옮길 수 있습니다"><b>예약 자동입력 설정</b><span class="ver">${ver}</span><span class="grip">⠿ 끌어서 이동</span><button type="button" class="x" aria-label="닫기">×</button></div>
       <p class="sub">이 사이트(${location.hostname})에 저장됩니다. 다른 업체 사이트에서는 따로 입력하세요.</p>
       <p class="err">${note || ''}</p><div class="grid4"></div>`;
-    const grid = panel.querySelector('.grid4');
+    return panel.querySelector('.grid4');
+  }
+  // 설정 칸 하나 (체크박스 또는 입력칸, 지금 값으로 채움)
+  function addField(grid, f, c) {
+    const id = 'f_' + f.key;
+    const help = f.help ? `<span class="help">${f.help}</span>` : '';
+    if (f.type === 'check') {
+      grid.insertAdjacentHTML('beforeend', `<label class="c span4 ${f.danger ? 'danger' : ''}"><input type="checkbox" id="${id}" ${c[f.key] ? 'checked' : ''}><span>${f.label}${f.danger ? `<span class="help danger">${f.danger}</span>` : help}</span></label>`);
+      return;
+    }
+    const input = f.type === 'groups' ? `<textarea id="${id}"></textarea>`
+      : `<input id="${id}" type="${{ number: 'number', datetime: 'datetime-local', date: 'date' }[f.type] || 'text'}" ${f.type === 'datetime' ? 'step="1"' : ''} ${f.type === 'phone' ? 'inputmode="tel"' : ''}>`;
+    grid.insertAdjacentHTML('beforeend', `<label class="f span${f.w || 1}"><span>${f.label}${f.required ? ' <b>*</b>' : ''}</span>${input}${help}</label>`);
+    ui.getElementById(id).value = toText(f, c[f.key]);
+  }
+  // 설정 창 아래 버튼을 붙이고 보이기
+  function showPanel() {
+    panel.insertAdjacentHTML('beforeend', `<div class="btns"><button type="button" class="close">닫기</button><button type="submit" class="primary">저장하고 새로고침</button></div>`);
+    panel.querySelector('.close').onclick = () => { panel.hidden = true; };
+    panel.querySelector('.x').onclick = () => { panel.hidden = true; };
+    panel.hidden = false;
+    placePanel();
+  }
+  function openPanel(note) {
+    const ship = currentShip();
+    panel.dataset.shipId = ship ? ship.id : '';
+    const all = loadConfig();
+    const c = ship ? forShip(all, ship.id) : all;
+    const grid = panelTop(note);
     let shipHeadDone = false;
     for (const f of FIELDS) {
-      const id = 'f_' + f.key;
-      const help = f.help ? `<span class="help">${f.help}</span>` : '';
       if (f.perShip && !shipHeadDone) {
         shipHeadDone = true;
         grid.insertAdjacentHTML('beforeend', ship
@@ -263,15 +285,9 @@
           : `<h3 class="shiphead full">배별 설정 (낚시종류·좌석)</h3><p class="help shipnote full">배 이름을 입력하고 저장하면, 그 배의 낚시종류·좌석 설정이 여기에 나타납니다.</p>`);
       }
       if (f.perShip && !ship) continue;
-      if (f.type === 'check') {
-        grid.insertAdjacentHTML('beforeend', `<label class="c span4 ${f.danger ? 'danger' : ''}"><input type="checkbox" id="${id}" ${c[f.key] ? 'checked' : ''}><span>${f.label}${f.danger ? `<span class="help danger">${f.danger}</span>` : help}</span></label>`);
-        continue;
-      }
-      const input = f.type === 'groups' ? `<textarea id="${id}"></textarea>`
-        : `<input id="${id}" type="${{ number: 'number', datetime: 'datetime-local', date: 'date' }[f.type] || 'text'}" ${f.type === 'datetime' ? 'step="1"' : ''} ${f.type === 'phone' ? 'inputmode="tel"' : ''}>`;
-      grid.insertAdjacentHTML('beforeend', `<label class="f span${f.w || 1}"><span>${f.label}${f.required ? ' <b>*</b>' : ''}</span>${input}${help}</label>`);
-      ui.getElementById(id).value = toText(f, c[f.key]);
+      addField(grid, f, c);
       if (f.key === 'seatGroups') {
+        const id = 'f_' + f.key;
         ui.getElementById(id).closest('label').insertAdjacentHTML('beforeend', `<div class="pickrow"><button type="button" class="pickseat">배 그림에서 좌석 고르기</button></div>`);
         panel.querySelector('.pickseat').addEventListener('click', () => startPick(ship));
         // 좌석 시뮬레이터: 지금 배·인원·좌석 그룹(입력 중인 값)을 넘겨서 열기. 개인정보는 넘기지 않음
@@ -300,11 +316,7 @@
         });
       }
     }
-    panel.insertAdjacentHTML('beforeend', `<div class="btns"><button type="button" class="close">닫기</button><button type="submit" class="primary">저장하고 새로고침</button></div>`);
-    panel.querySelector('.close').onclick = () => { panel.hidden = true; };
-    panel.querySelector('.x').onclick = () => { panel.hidden = true; };
-    panel.hidden = false;
-    placePanel();
+    showPanel();
   }
   panel.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -684,9 +696,46 @@
   // 낚시종류 선택지(라디오)만. 페이지에는 같은 이름의 숨은 칸(ps_form)도 있음
   const fishRadios = (doc = document) => [...doc.querySelectorAll('input[type=radio][name=PS_N_UID]')];
 
+  // 낚시종류 고르기: 키워드가 하나라도 들어간 종류 중 맨 위, 없으면 첫 번째
+  function pickFish(radios) {
+    const usable = radios.filter((r) => !r.disabled);
+    return usable.find((r) => CONFIG.fishKeywords.some((k) => (r.closest('tr')?.textContent || '').includes(k))) || usable[0];
+  }
+  // 낚시종류가 선택된 예약 화면 주소 (사이트의 ps_url(date, PA, PH, PS)과 같은 주소)
+  function fishUrl(radio) {
+    const m = (radio.getAttribute('onclick') || '').match(/ps_url\('(\d+)',\s*'(\d+)',\s*'(\d*)',\s*'(\d+)'\)/);
+    const [d, p, ph, ps] = m ? m.slice(1) : [date, pa, '0', radio.value];
+    return new URL(`./popup.step1.php?date=${d}&PA_N_UID=${p}&PH_N_UID=${ph || 0}&PS_N_UID=${ps}`, location.href).href;
+  }
+  const fishLabel = (r) => (r.closest('tr')?.textContent || r.value).replace(/\s+/g, ' ').trim();
+
+  // 1) 오픈 전: 페이지를 새로고침하지 않고 fetch로 확인하다가, 열리면 낚시종류가 선택된 화면으로 바로 이동
+  // 대기 중지: "중지"를 누르면 확인 요청을 멈추고, 이 탭의 시작 표시도 지워 새로고침해도 다시 시작하지 않음
+  let stopped = false;
+  let runId = 0; // 중지 후 다시 시작해도 이전 대기 루프가 함께 돌지 않게
+  const stopBtn = ui.querySelector('.stop');
+
+  // 오픈 시각(설정)까지 요청 없이 카운트다운 (서버 시계 기준). 끝까지 기다렸으면 true, 중지되면 false
+  // tick: 1초마다 함께 할 일 (false를 돌려주면 멈춤)
+  async function countdown(label, dead, tick) {
+    if (CONFIG.openAt) {
+      status('서버 시계를 확인하는 중…');
+      await syncClock();
+      const startAt = new Date(CONFIG.openAt).getTime() - CONFIG.startBeforeSec * 1000;
+      while (serverNow() < startAt) {
+        if (dead() || (tick && !(await tick()))) return false;
+        const s = Math.ceil((startAt - serverNow()) / 1000);
+        const hms = new Date(s * 1000).toISOString().slice(11, 19);
+        $msg.textContent = `${label} / 확인 시작까지 ${s >= 86400 ? Math.floor(s / 86400) + '일 ' : ''}${hms} (요청 없음)${offsetNote()}`;
+        await sleep(Math.min(1000, startAt - serverNow()));
+      }
+    }
+    return !dead();
+  }
+
   // ---------- 서버 시계 보정: 사이트 응답의 Date 헤더로 PC 시계와의 차이를 잼 ----------
   let clockOffset = 0; // 서버시각 - PC시각 (ms)
-  const serverNow = () => Date.now() + clockOffset;
+  function serverNow() { return Date.now() + clockOffset; }
   async function syncClock() {
     const samples = [];
     for (let i = 0; i < 3; i++) {
@@ -700,11 +749,13 @@
     }
     if (samples.length) clockOffset = samples.sort((a, b) => a - b)[Math.floor(samples.length / 2)];
   }
-  const offsetNote = () => Math.abs(clockOffset) >= 1000
-    ? ` · 서버 시계 기준(PC가 ${Math.round(Math.abs(clockOffset) / 1000)}초 ${clockOffset > 0 ? '늦음' : '빠름'})` : '';
+  function offsetNote() {
+    return Math.abs(clockOffset) >= 1000
+      ? ` · 서버 시계 기준(PC가 ${Math.round(Math.abs(clockOffset) / 1000)}초 ${clockOffset > 0 ? '늦음' : '빠름'})` : '';
+  }
 
   // ---------- 겹쳐 보내기: 응답이 늦어도 끊지 않고 기다리되, 5초 넘게 응답이 없으면 하나 더 보냄 (최대 3개) ----------
-  // probe(signal) → 열렸으면 결과 객체, 아니면 null
+  // probe(signal) → 열렸으면 결과, 아니면 null
   async function pollOverlap(probe, dead, label) {
     const MAX_INFLIGHT = 3, STAGGER_MS = 5000, ASK_AFTER_MS = 60000;
     let found = null, sent = 0, lastSent = 0;
@@ -734,24 +785,19 @@
     return dead() ? null : found;
   }
 
-  // 낚시종류 고르기: 키워드가 하나라도 들어간 종류 중 맨 위, 없으면 첫 번째
-  function pickFish(radios) {
-    const usable = radios.filter((r) => !r.disabled);
-    return usable.find((r) => CONFIG.fishKeywords.some((k) => (r.closest('tr')?.textContent || '').includes(k))) || usable[0];
+  // 화면이 깨졌을 때 잠시 뒤 다시 열기 (beforeReload: 다시 열기 직전에 할 일)
+  function reloadSoon(why, beforeReload) {
+    let sec = 3;
+    stopped = false;
+    stopBtn.hidden = false;
+    const tick = () => {
+      if (stopped) return;
+      status(`${why} ${sec}초 뒤 다시 엽니다… (그만하려면 중지)`);
+      if (sec-- <= 0) { beforeReload?.(); location.reload(); return; }
+      setTimeout(tick, 1000);
+    };
+    tick();
   }
-  // 낚시종류가 선택된 예약 화면 주소 (사이트의 ps_url(date, PA, PH, PS)과 같은 주소)
-  function fishUrl(radio) {
-    const m = (radio.getAttribute('onclick') || '').match(/ps_url\('(\d+)',\s*'(\d+)',\s*'(\d*)',\s*'(\d+)'\)/);
-    const [d, p, ph, ps] = m ? m.slice(1) : [date, pa, '0', radio.value];
-    return new URL(`./popup.step1.php?date=${d}&PA_N_UID=${p}&PH_N_UID=${ph || 0}&PS_N_UID=${ps}`, location.href).href;
-  }
-  const fishLabel = (r) => (r.closest('tr')?.textContent || r.value).replace(/\s+/g, ' ').trim();
-
-  // 1) 오픈 전: 페이지를 새로고침하지 않고 fetch로 확인하다가, 열리면 낚시종류가 선택된 화면으로 바로 이동
-  // 대기 중지: "중지"를 누르면 확인 요청을 멈추고, 이 탭의 시작 표시도 지워 새로고침해도 다시 시작하지 않음
-  let stopped = false;
-  let runId = 0; // 중지 후 다시 시작해도 이전 대기 루프가 함께 돌지 않게
-  const stopBtn = ui.querySelector('.stop');
   stopBtn.onclick = () => {
     stopped = true;
     stopBtn.hidden = true;
@@ -765,19 +811,7 @@
     const dead = () => stopped || my !== runId;
     stopBtn.hidden = false;
     const openLabel = CONFIG.openAt ? ` 오픈 ${fmtTime(CONFIG.openAt)}` : '';
-    // 오픈 시각이 설정돼 있으면 (오픈 - startBeforeSec)까지는 요청 없이 카운트다운만 (서버 시계 기준)
-    if (CONFIG.openAt) {
-      status('서버 시계를 확인하는 중…');
-      await syncClock();
-      const startAt = new Date(CONFIG.openAt).getTime() - CONFIG.startBeforeSec * 1000;
-      while (serverNow() < startAt) {
-        if (dead()) return;
-        const s = Math.ceil((startAt - serverNow()) / 1000);
-        const hms = new Date(s * 1000).toISOString().slice(11, 19);
-        $msg.textContent = `${date}${openLabel} / 확인 시작까지 ${s >= 86400 ? Math.floor(s / 86400) + '일 ' : ''}${hms} (요청 없음)${offsetNote()}`;
-        await sleep(Math.min(1000, startAt - serverNow()));
-      }
-    }
+    if (!(await countdown(`${date}${openLabel}`, dead))) return;
     const radios = await pollOverlap(async (signal) => {
       const html = await fetch(location.href, { cache: 'no-store', signal }).then((r) => r.text());
       const found = fishRadios(new DOMParser().parseFromString(html, 'text/html'));
@@ -886,19 +920,6 @@
     }
     if (fishRadios().length) selectFish();
     else waitForOpen();
-  }
-  // 화면이 깨졌을 때 다시 열기 (이 탭의 시작 표시가 남아 있어 다시 열리면 이어서 진행)
-  function reloadSoon(why) {
-    let sec = 3;
-    const tick = () => {
-      if (stopped) return;
-      status(`${why} ${sec}초 뒤 다시 엽니다… (그만하려면 중지)`);
-      if (sec-- <= 0) { location.reload(); return; }
-      setTimeout(tick, 1000);
-    };
-    stopped = false;
-    stopBtn.hidden = false;
-    tick();
   }
 
   function showStep1Start(msg) {

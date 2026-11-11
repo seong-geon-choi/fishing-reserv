@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.3.1111-142538
+// @version      2.5.4.1111-144416
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -143,34 +143,49 @@
     <div class="bar"><span class="msg"></span><span class="auto" hidden>자동 신청 켜짐</span><button class="start primary" type="button" hidden>예약 대기 시작</button><span class="ask" hidden><button class="wait1" type="button">1분 더 기다리기</button><button class="cut" type="button">끊고 새로 요청</button></span><button class="stop" type="button" hidden>중지</button><button class="gear" type="button">설정</button></div>
     <form class="panel" hidden></form>`;
   document.documentElement.appendChild(host);
-  // 상태 바가 사이트 위쪽 메뉴(로그인 등)를 가리지 않게, 바 높이만큼 페이지를 아래로 밀기
+  // 상태 바가 사이트 위쪽 메뉴를 가리지 않게, 바 높이만큼 페이지를 아래로 밀기
   const $bar = ui.querySelector('.bar');
   new ResizeObserver(() => { document.documentElement.style.paddingTop = $bar.offsetHeight + 'px'; }).observe($bar);
   const $msg = ui.querySelector('.msg');
   const panel = ui.querySelector('.panel');
   const status = (m) => { $msg.textContent = m; console.log('[자동입력]', m); };
 
-  function openPanel(note) {
-    const c = loadConfig();
-    // 버전 "2.3.1.1110-225502" (기본 버전.월일-시분초) → "버전 2.3.1 · 수정 11-10 22:55:02"
+  // 설정 창 머리 + 빈 입력 칸 격자. 버전 "2.3.1.1110-225502" (기본 버전.월일-시분초) → "버전 2.3.1 · 수정 11-10 22:55:02"
+  function panelTop(note) {
     const raw = typeof GM_info !== 'undefined' ? GM_info.script.version : '';
     const vm = raw.match(/^(\d+\.\d+\.\d+)\.(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/);
     const ver = !raw ? '' : vm ? `버전 ${vm[1]} · 수정 ${vm[2]}-${vm[3]} ${vm[4]}:${vm[5]}:${vm[6]}` : `버전 ${raw}`;
     panel.innerHTML = `<div class="phead" title="끌어서 옮길 수 있습니다"><b>예약 자동입력 설정</b><span class="ver">${ver}</span><span class="grip">⠿ 끌어서 이동</span><button type="button" class="x" aria-label="닫기">×</button></div>
       <p class="sub">이 사이트(${location.hostname})에 저장됩니다. 다른 업체 사이트에서는 따로 입력하세요.</p>
       <p class="err">${note || ''}</p><div class="grid4"></div>`;
-    const grid = panel.querySelector('.grid4');
+    return panel.querySelector('.grid4');
+  }
+  // 설정 칸 하나 (체크박스 또는 입력칸, 지금 값으로 채움)
+  function addField(grid, f, c) {
+    const id = 'f_' + f.key;
+    const help = f.help ? `<span class="help">${f.help}</span>` : '';
+    if (f.type === 'check') {
+      grid.insertAdjacentHTML('beforeend', `<label class="c span4 ${f.danger ? 'danger' : ''}"><input type="checkbox" id="${id}" ${c[f.key] ? 'checked' : ''}><span>${f.label}${f.danger ? `<span class="help danger">${f.danger}</span>` : help}</span></label>`);
+      return;
+    }
+    const input = f.type === 'groups' ? `<textarea id="${id}"></textarea>`
+      : `<input id="${id}" type="${{ number: 'number', datetime: 'datetime-local', date: 'date' }[f.type] || 'text'}" ${f.type === 'datetime' ? 'step="1"' : ''} ${f.type === 'phone' ? 'inputmode="tel"' : ''}>`;
+    grid.insertAdjacentHTML('beforeend', `<label class="f span${f.w || 1}"><span>${f.label}${f.required ? ' <b>*</b>' : ''}</span>${input}${help}</label>`);
+    ui.getElementById(id).value = toText(f, c[f.key]);
+  }
+  // 설정 창 아래 버튼을 붙이고 보이기
+  function showPanel() {
+    panel.insertAdjacentHTML('beforeend', `<div class="btns"><button type="button" class="close">닫기</button><button type="submit" class="primary">저장하고 새로고침</button></div>`);
+    panel.querySelector('.close').onclick = () => { panel.hidden = true; };
+    panel.querySelector('.x').onclick = () => { panel.hidden = true; };
+    panel.hidden = false;
+    placePanel();
+  }
+  function openPanel(note) {
+    const c = loadConfig();
+    const grid = panelTop(note);
     for (const f of FIELDS) {
-      const id = 'f_' + f.key;
-      const help = f.help ? `<span class="help">${f.help}</span>` : '';
-      if (f.type === 'check') {
-        grid.insertAdjacentHTML('beforeend', `<label class="c span4 ${f.danger ? 'danger' : ''}"><input type="checkbox" id="${id}" ${c[f.key] ? 'checked' : ''}><span>${f.label}${f.danger ? `<span class="help danger">${f.danger}</span>` : help}</span></label>`);
-        continue;
-      }
-      const input = f.type === 'groups' ? `<textarea id="${id}"></textarea>`
-        : `<input id="${id}" type="${{ number: 'number', datetime: 'datetime-local', date: 'date' }[f.type] || 'text'}" ${f.type === 'datetime' ? 'step="1"' : ''} ${f.type === 'phone' ? 'inputmode="tel"' : ''}>`;
-      grid.insertAdjacentHTML('beforeend', `<label class="f span${f.w || 1}"><span>${f.label}${f.required ? ' <b>*</b>' : ''}</span>${input}${help}</label>`);
-      ui.getElementById(id).value = toText(f, c[f.key]);
+      addField(grid, f, c);
       if (f.key === 'seatGroups') {
         // 좌석 그룹 칸 옆에 그 배의 자리배치도 그림
         grid.insertAdjacentHTML('beforeend', '<div class="span2 seatimg"><p class="help">자리배치도를 찾는 중…</p></div>');
@@ -182,11 +197,7 @@
         }).catch(() => { cell.innerHTML = '<p class="help">자리배치도를 가져오지 못했습니다.</p>'; });
       }
     }
-    panel.insertAdjacentHTML('beforeend', `<div class="btns"><button type="button" class="close">닫기</button><button type="submit" class="primary">저장하고 새로고침</button></div>`);
-    panel.querySelector('.close').onclick = () => { panel.hidden = true; };
-    panel.querySelector('.x').onclick = () => { panel.hidden = true; };
-    panel.hidden = false;
-    placePanel();
+    showPanel();
   }
   // 자리배치도 그림 주소 찾기: 예약 화면이면 이 화면에서, 아니면 설정의 배 이름으로 그 배의 예약 화면을 받아 봄
   // (받아 보기만 하므로 예약은 생기지 않음). 배치도는 배마다 고정이라 배 이름별로 기억
@@ -310,67 +321,23 @@
   let stopped = false;
   let runId = 0; // 중지 후 다시 시작해도 이전 대기 루프가 함께 돌지 않게
   const stopBtn = ui.querySelector('.stop');
-  stopBtn.onclick = () => {
-    stopped = true;
-    stopBtn.hidden = true;
-    showStart('대기를 중지했습니다. 다시 하려면 "예약 대기 시작"을 누르세요.');
-  };
 
-  // 로그인 확인: 마이페이지에 "로그아웃" 메뉴가 있으면 로그인 상태 (선상24는 배 사이트 주소마다 로그인이 따로)
-  async function loggedIn() {
-    try {
-      const html = await fetch('/mypage/my', { cache: 'no-store' }).then((r) => r.text());
-      return />\s*로그아웃\s*</.test(html);
-    } catch (e) { return null; } // 확인 실패(혼잡 등)는 로그아웃으로 보지 않음
-  }
-  const LOGIN_MSG = `이 배 사이트(${location.hostname})에 로그인되어 있지 않습니다. 로그인한 뒤 이 화면을 새로고침하세요.`;
-
-  async function waitOnSchedule() {
-    const my = ++runId;
-    stopped = false;
-    const dead = () => stopped || my !== runId;
-    stopBtn.hidden = false;
-    // 대기 중 로그인이 풀리면 멈추고 알림 (풀린 채로 예약 화면에 가면 예약할 수 없음)
-    const loginLost = async () => {
-      if ((await loggedIn()) !== false || dead()) return false;
-      stopped = true;
-      stopBtn.hidden = true;
-      status('로그인이 풀려 대기를 멈췄습니다. ' + LOGIN_MSG + ' 그다음 "예약 대기 시작"을 다시 누르세요.');
-      return true;
-    };
-    const label = `${M}월 ${D}일${shipNames.length ? ` ${shipNames.join('/')}` : ''}${CONFIG.openAt ? ` / 오픈 ${fmtTime(CONFIG.openAt)}` : ''}`;
+  // 오픈 시각(설정)까지 요청 없이 카운트다운 (서버 시계 기준). 끝까지 기다렸으면 true, 중지되면 false
+  // tick: 1초마다 함께 할 일 (false를 돌려주면 멈춤)
+  async function countdown(label, dead, tick) {
     if (CONFIG.openAt) {
-      // 오픈 시각까지는 요청 없이 카운트다운만 (서버 시계 기준)
       status('서버 시계를 확인하는 중…');
       await syncClock();
       const startAt = new Date(CONFIG.openAt).getTime() - CONFIG.startBeforeSec * 1000;
-      let nextLoginCheck = 0; // 시작할 때, 그 뒤 5분마다 로그인 확인
       while (serverNow() < startAt) {
-        if (dead()) return;
-        if (Date.now() >= nextLoginCheck) {
-          nextLoginCheck = Date.now() + 5 * 60 * 1000;
-          if (await loginLost()) return;
-        }
+        if (dead() || (tick && !(await tick()))) return false;
         const s = Math.ceil((startAt - serverNow()) / 1000);
         const hms = new Date(s * 1000).toISOString().slice(11, 19);
         $msg.textContent = `${label} / 확인 시작까지 ${s >= 86400 ? Math.floor(s / 86400) + '일 ' : ''}${hms} (요청 없음)${offsetNote()}`;
         await sleep(Math.min(1000, startAt - serverNow()));
       }
     }
-    if (await loginLost()) return; // 확인 요청을 시작하기 직전에 한 번 더
-    const url = await pollOverlap(async (signal) => {
-      // 하루치 일정(사이트가 예약 완료 후 쓰는 요청)만 받아 확인: 한 달치 페이지보다 15~20배 작음
-      const r = await fetch(`/ship/schedule_fleet/${CONFIG.date}/0/simple_day1`, { cache: 'no-store', signal });
-      if (r.ok) return findInDay(new DOMParser().parseFromString(`<table>${await r.text()}</table>`, 'text/html'));
-      // 하루치 요청이 안 되면 한 달치 일정 페이지로 확인
-      const html = await fetch(`/ship/schedule_fleet/${ym}`, { cache: 'no-store', signal }).then((x) => x.text());
-      return findSchedule(new DOMParser().parseFromString(html, 'text/html'));
-    }, dead, label);
-    if (!url) return;
-    stopBtn.hidden = true;
-    status(`예약 오픈 감지! 예약 화면으로 이동합니다 (${url.split('/').slice(-2).join('/')})`);
-    try { sessionStorage.setItem(FLAG, url); } catch (e) { /* 저장 불가 시 자동 제출만 생략됨 */ }
-    location.href = url;
+    return !dead();
   }
 
   // ---------- 서버 시계 보정: 사이트 응답의 Date 헤더로 PC 시계와의 차이를 잼 ----------
@@ -425,7 +392,7 @@
     return dead() ? null : found;
   }
 
-  // 화면이 깨졌을 때 다시 열기
+  // 화면이 깨졌을 때 잠시 뒤 다시 열기 (beforeReload: 다시 열기 직전에 할 일)
   function reloadSoon(why, beforeReload) {
     let sec = 3;
     stopped = false;
@@ -437,6 +404,57 @@
       setTimeout(tick, 1000);
     };
     tick();
+  }
+  stopBtn.onclick = () => {
+    stopped = true;
+    stopBtn.hidden = true;
+    showStart('대기를 중지했습니다. 다시 하려면 "예약 대기 시작"을 누르세요.');
+  };
+
+  // 로그인 확인: 마이페이지에 "로그아웃" 메뉴가 있으면 로그인 상태 (선상24는 배 사이트 주소마다 로그인이 따로)
+  async function loggedIn() {
+    try {
+      const html = await fetch('/mypage/my', { cache: 'no-store' }).then((r) => r.text());
+      return />\s*로그아웃\s*</.test(html);
+    } catch (e) { return null; } // 확인 실패(혼잡 등)는 로그아웃으로 보지 않음
+  }
+  const LOGIN_MSG = `이 배 사이트(${location.hostname})에 로그인되어 있지 않습니다. 로그인한 뒤 이 화면을 새로고침하세요.`;
+
+  async function waitOnSchedule() {
+    const my = ++runId;
+    stopped = false;
+    const dead = () => stopped || my !== runId;
+    stopBtn.hidden = false;
+    // 대기 중 로그인이 풀리면 멈추고 알림 (풀린 채로 예약 화면에 가면 예약할 수 없음)
+    const loginLost = async () => {
+      if ((await loggedIn()) !== false || dead()) return false;
+      stopped = true;
+      stopBtn.hidden = true;
+      status('로그인이 풀려 대기를 멈췄습니다. ' + LOGIN_MSG + ' 그다음 "예약 대기 시작"을 다시 누르세요.');
+      return true;
+    };
+    const label = `${M}월 ${D}일${shipNames.length ? ` ${shipNames.join('/')}` : ''}${CONFIG.openAt ? ` / 오픈 ${fmtTime(CONFIG.openAt)}` : ''}`;
+    let nextLoginCheck = 0; // 시작할 때, 그 뒤 5분마다 로그인 확인
+    const ok = await countdown(label, dead, async () => {
+      if (Date.now() < nextLoginCheck) return true;
+      nextLoginCheck = Date.now() + 5 * 60 * 1000;
+      return !(await loginLost());
+    });
+    if (!ok) return;
+    if (await loginLost()) return; // 확인 요청을 시작하기 직전에 한 번 더
+    const url = await pollOverlap(async (signal) => {
+      // 하루치 일정(사이트가 예약 완료 후 쓰는 요청)만 받아 확인: 한 달치 페이지보다 15~20배 작음
+      const r = await fetch(`/ship/schedule_fleet/${CONFIG.date}/0/simple_day1`, { cache: 'no-store', signal });
+      if (r.ok) return findInDay(new DOMParser().parseFromString(`<table>${await r.text()}</table>`, 'text/html'));
+      // 하루치 요청이 안 되면 한 달치 일정 페이지로 확인
+      const html = await fetch(`/ship/schedule_fleet/${ym}`, { cache: 'no-store', signal }).then((x) => x.text());
+      return findSchedule(new DOMParser().parseFromString(html, 'text/html'));
+    }, dead, label);
+    if (!url) return;
+    stopBtn.hidden = true;
+    status(`예약 오픈 감지! 예약 화면으로 이동합니다 (${url.split('/').slice(-2).join('/')})`);
+    try { sessionStorage.setItem(FLAG, url); } catch (e) { /* 저장 불가 시 자동 제출만 생략됨 */ }
+    location.href = url;
   }
 
   // 2) 예약 화면: 인원 → 예약자 → 약관 동의 → (autoSubmit) 예약하기

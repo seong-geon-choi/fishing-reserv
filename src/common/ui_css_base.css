@@ -1,0 +1,26 @@
+      :host { all: initial; }
+      * { box-sizing: border-box; font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+      .bar { display:flex; gap:8px; align-items:center; padding:8px 12px; background:#1f2933; color:#ffe14d; font-size:14px; font-weight:700; }
+      .msg { flex:1; min-width:0; }
+      .auto { background:#c92a2a; color:#fff; border-radius:4px; padding:2px 6px; font-size:12px; white-space:nowrap; }
+      button { font:inherit; font-size:13px; cursor:pointer; border-radius:6px; padding:6px 12px; border:1px solid #9aa5b1; background:#fff; color:#1f2933; }
+      button.primary { background:#1c6fb8; border-color:#1c6fb8; color:#fff; }
+      .panel { background:#fff; color:#1f2933; max-width:520px; margin:0 auto; max-height:calc(100vh - 50px); overflow:auto; padding:16px; border-radius:0 0 10px 10px; box-shadow:0 8px 24px rgba(0,0,0,.25); font-size:14px; font-weight:400; }
+      .panel[hidden] { display:none; }
+      h2 { margin:0 0 4px; font-size:17px; }
+      .sub { margin:0 0 12px; color:#52606d; font-size:13px; }
+      label.f { display:block; margin:0 0 12px; }
+      label.f > span { display:block; font-weight:700; margin-bottom:4px; }
+      label.f > span b { color:#c92a2a; }
+      input[type=text], input[type=number], input[type=date], input[type=datetime-local], textarea { width:100%; font-size:15px; padding:8px; border:1px solid #9aa5b1; border-radius:6px; background:#fff; color:#1f2933; }
+      textarea { min-height:88px; font-family:Consolas, monospace; }
+      label.c { display:flex; gap:8px; align-items:flex-start; margin:0 0 12px; font-weight:700; }
+      label.c input { width:20px; height:20px; margin:0; flex:none; }
+      .help { display:block; color:#52606d; font-size:12px; margin-top:3px; font-weight:400; }
+      .danger { color:#c92a2a; }
+      .err { background:#fde8e8; color:#c92a2a; border-radius:6px; padding:8px; margin:0 0 12px; }
+      .err:empty { display:none; }
+      .btns { display:flex; gap:8px; justify-content:flex-end; }
+      .ver { font-size:12px; font-weight:400; color:#52606d; }
+      .ask { display:inline-flex; gap:6px; }
+      .ask[hidden] { display:none; }

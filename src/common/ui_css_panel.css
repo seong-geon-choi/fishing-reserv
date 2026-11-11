@@ -1,0 +1,25 @@
+      /* 떠 있는 설정 창 + 한 화면 격자 배치 */
+      .panel { position:fixed; margin:0; max-width:none; width:min(820px, calc(100vw - 16px)); max-height:calc(100vh - 16px); border-radius:10px; padding:0 16px 14px; }
+      .phead { display:flex; align-items:center; gap:8px; margin:0 -16px 8px; padding:9px 12px 9px 16px; background:#1f2933; color:#fff;
+        border-radius:10px 10px 0 0; cursor:move; user-select:none; touch-action:none; position:sticky; top:0; z-index:1; }
+      .phead b { font-size:15px; }
+      .phead .ver { color:#c9d3dc; }
+      .phead .grip { color:#9aa5b1; font-size:12px; font-weight:400; margin-left:auto; }
+      .phead .x { background:transparent; border:0; color:#fff; font-size:20px; line-height:1; padding:0 4px; cursor:pointer; }
+      .sub { margin:0 0 6px; font-size:12px; }
+      .err { margin:0 0 8px; }
+      .grid4 { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px 12px; align-items:start; }
+      .span1 { grid-column:span 1; } .span2 { grid-column:span 2; } .span3 { grid-column:span 3; } .span4, .full { grid-column:1 / -1; }
+      @media (max-width: 640px) { .grid4 { grid-template-columns:repeat(2, minmax(0, 1fr)); } .span3 { grid-column:1 / -1; } }
+      label.f { margin:0; min-width:0; }
+      label.f > span { font-size:13px; margin-bottom:2px; }
+      input[type=text], input[type=number], input[type=date], input[type=datetime-local], textarea { font-size:14px; padding:6px 8px; }
+      textarea { min-height:64px; }
+      label.c { margin:0; font-size:13px; align-items:center; }
+      label.c input { width:18px; height:18px; }
+      .help { font-size:11px; line-height:1.35; margin-top:2px; }
+      h3.shiphead { margin:6px 0 0; padding-top:8px; font-size:14px; }
+      .shipnote { margin:-4px 0 0; }
+      .pickrow { margin:4px 0 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+      .pickrow button { padding:4px 10px; font-size:12px; }
+      .btns { margin-top:12px; }

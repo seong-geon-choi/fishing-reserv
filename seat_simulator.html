@@ -191,6 +191,10 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
         <label class="f"><span><b>예약 인원</b></span><input type="number" id="people" min="1" max="30" value="4"></label>
         <label class="check"><input type="checkbox" id="fallback" checked> 그룹으로 인원을 못 채우면 남은 좌석으로 채우기</label>
       </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="partial"> 좌석이 인원보다 적으면 남은 좌석만큼만 예약</label>
+        <label class="f"><span><b>최소 인원</b></span><input type="number" id="minPeople" min="1" max="30" value="1"></label>
+      </div>
       <label class="f"><span><b>좌석 그룹</b> · 한 줄에 그룹 하나, 위쪽 줄이 우선</span>
         <textarea id="groups" spellcheck="false"></textarea>
       </label>
@@ -281,13 +285,16 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
     state[key] = saved && saved.v === VER ? saved : {
       v: VER, slots: { ...p.slots }, groupsText: groupsToText(p.groups), people: p.people, fallback: true, taken: p.taken.slice(),
     };
+    // 나중에 생긴 항목 (예전에 저장된 상태에는 없음)
+    state[key].partial = state[key].partial ?? false;
+    state[key].minPeople = state[key].minPeople ?? 1;
     return state[key];
   }
   const cur = () => loadShip(shipKey);
   const save = () => store.set('sim2.' + shipKey, cur());
 
   // 예약 스크립트 설정 창의 "미리 보기" 링크로 들어온 경우:
-  //   #ship=배번호&people=2&groups=8,9,7|2,3&fallback=1
+  //   #ship=배번호&people=2&groups=8,9,7|2,3&fallback=1&partial=0&min=1
   //   (+ 예약 사이트에서 읽은 배치) &name=배이름&date=20261124&layout=칸:좌석,…&taken=좌석,…
   (() => {
     const h = new URLSearchParams(location.hash.slice(1));
@@ -312,6 +319,9 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
       if (n > 0) s.people = n;
       if (h.has('fallback')) s.fallback = h.get('fallback') === '1';
     }
+    const s = cur();
+    if (h.has('partial')) s.partial = h.get('partial') === '1';
+    if (parseInt(h.get('min'), 10) > 0) s.minPeople = parseInt(h.get('min'), 10);
     store.set('sim.ship', shipKey);
     save();
   })();
@@ -399,7 +409,6 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
     $('delBtn').disabled = selSlot == null || s.slots[selSlot] == null;
 
     // 결과
-    const freeTotal = order.filter((n) => !taken.has(n)).length;
     let html = '';
     if (sim.picks.length) html += '<div class="result-seats">' + sim.picks.map((n, i) => `<span class="chip ${i < sim.fromList ? '' : 'fb'}">${n}</span>`).join('') + '</div>';
     let how;
@@ -408,10 +417,13 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
     else how = '그룹 목록에 빈 좌석이 없습니다.';
     const fb = sim.picks.length - sim.fromList;
     if (fb > 0) how += ` 모자란 ${fb}석은 남은 좌석에서 화면 순서대로 채웠습니다.`;
-    html += `<p class="big">${sim.picks.length ? `예약 인원 ${sim.picks.length}명` : '좌석 선택 없음'}</p><p class="note" style="color:var(--fg)">${how}</p>`;
-    if (sim.picks.length && sim.picks.length < people) html += `<p class="warn">설정 인원은 ${people}명이지만 ${sim.picks.length}석만 골라져 <b>${sim.picks.length}명으로 예약</b>됩니다. 사이트가 고른 좌석 수에 맞춰 인원을 바꾸기 때문입니다.</p>`;
-    if (!sim.picks.length) html += `<p class="warn">좌석 없이 인원 ${people}명만 선택하고 진행합니다. 이때 사이트가 좌석을 어떻게 처리하는지는 확인되지 않았습니다.</p>`;
-    if (people > freeTotal) html += `<p class="warn">남은 좌석(${freeTotal}석)보다 인원이 많습니다. 실제 사이트에서는 대기자 확인창이 뜹니다.</p>`;
+    // 좌석이 인원보다 적을 때: 스크립트와 같은 판단 ("남은 좌석만큼만 예약" + 최소 인원)
+    const got = sim.picks.length;
+    const minP = Math.max(1, parseInt(s.minPeople, 10) || 1);
+    const go = got >= people ? people : s.partial && got >= minP ? got : 0;
+    html += `<p class="big">${go ? `예약 인원 ${go}명` : '자동 신청 안 함'}</p><p class="note" style="color:var(--fg)">${how}</p>`;
+    if (got < people && go) html += `<p class="warn">설정 인원은 ${people}명이지만 잡을 수 있는 좌석이 ${got}석이라, "남은 좌석만큼만 예약"이 켜져 있어 <b>${got}명으로 예약</b>합니다(자동 신청이 켜져 있으면 그대로 신청).</p>`;
+    if (!go) html += `<p class="warn">${got ? `잡을 수 있는 좌석이 ${got}석뿐입니다(설정 인원 ${people}명${s.partial ? `, 최소 인원 ${minP}명` : ''}).` : '잡을 수 있는 좌석이 없습니다.'} 스크립트는 ${got ? `${got}석까지만 입력하고` : '좌석을 고르지 않고'} <b>자동 신청하지 않습니다.</b> 화면을 보고 직접 정해야 합니다.${s.partial ? '' : ' 남은 좌석만큼이라도 예약하려면 "남은 좌석만큼만 예약"을 켜세요.'}</p>`;
     $('result').innerHTML = html;
 
     // 그룹 표
@@ -439,13 +451,15 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
     $('groupWarn').innerHTML = warns.map((w) => `<p class="warn">${w}</p>`).join('');
 
     $('cfgOut').textContent = groups.map((g) => g.join(', ')).join('\n') || '(좌석 그룹을 입력하세요)';
-    $('cfgNote').textContent = `함께 맞출 항목: 예약 인원 ${people}명, "남은 좌석으로 채우기" ${s.fallback ? '켜기' : '끄기'}. 좌석 그룹은 배마다 따로 저장되니 ${PRESETS[shipKey].name} 예약 화면의 설정 창에 넣으세요.`;
+    $('cfgNote').textContent = `함께 맞출 항목: 예약 인원 ${people}명, "남은 좌석으로 채우기" ${s.fallback ? '켜기' : '끄기'}, "남은 좌석만큼만 예약" ${s.partial ? `켜기(최소 인원 ${minP}명)` : '끄기'}. 좌석 그룹은 배마다 따로 저장되니 ${PRESETS[shipKey].name} 예약 화면의 설정 창에 넣으세요.`;
   }
 
   function syncInputs() {
     const s = cur();
     $('people').value = s.people;
     $('fallback').checked = s.fallback;
+    $('partial').checked = s.partial;
+    $('minPeople').value = s.minPeople;
     $('groups').value = s.groupsText;
     const nums = Object.values(s.slots);
     $('genCount').value = nums.length || 12;
@@ -563,6 +577,8 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
 
   $('people').addEventListener('input', (e) => { cur().people = e.target.value; save(); render(); });
   $('fallback').addEventListener('change', (e) => { cur().fallback = e.target.checked; save(); render(); });
+  $('partial').addEventListener('change', (e) => { cur().partial = e.target.checked; save(); render(); });
+  $('minPeople').addEventListener('input', (e) => { cur().minPeople = e.target.value; save(); render(); });
   $('groups').addEventListener('input', (e) => { cur().groupsText = e.target.value; save(); render(); });
   $('editBtn').addEventListener('click', () => { editing = !editing; selSlot = null; $('editBtn').setAttribute('aria-pressed', editing); render(); });
   $('genBtn').addEventListener('click', () => {

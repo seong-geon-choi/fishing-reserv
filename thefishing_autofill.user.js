@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.5.1111-155737
+// @version      2.8.6.1111-160022
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -312,7 +312,8 @@
           `<div class="pickrow"><a class="simlink" target="_blank" rel="noopener" href="${SIM_URL}">좌석 시뮬레이터에서 미리 보기 ↗</a></div>`);
         panel.querySelector('.simlink').addEventListener('click', (e) => {
           const groups = ui.getElementById('f_seatGroups').value.split('\n').map((l) => nums(l).join(',')).filter(Boolean).join('|');
-          const p = new URLSearchParams({ ship: ship ? ship.id : '', people: ui.getElementById('f_people').value, groups, fallback: ui.getElementById('f_fallbackAnySeat')?.checked ? '1' : '0' });
+          const p = new URLSearchParams({ ship: ship ? ship.id : '', people: ui.getElementById('f_people').value, groups, fallback: ui.getElementById('f_fallbackAnySeat')?.checked ? '1' : '0',
+            partial: ui.getElementById('f_partialSeats')?.checked ? '1' : '0', min: ui.getElementById('f_minPeople')?.value || '1' });
           e.currentTarget.href = `${SIM_URL}#${p}`;
           if (!ship) return;
           // 이 배의 실제 좌석 배치와 가장 가까운 예약 가능 날짜의 예약 현황도 함께 넘김.

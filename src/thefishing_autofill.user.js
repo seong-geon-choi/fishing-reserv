@@ -173,7 +173,8 @@
           `<div class="pickrow"><a class="simlink" target="_blank" rel="noopener" href="${SIM_URL}">좌석 시뮬레이터에서 미리 보기 ↗</a></div>`);
         panel.querySelector('.simlink').addEventListener('click', (e) => {
           const groups = ui.getElementById('f_seatGroups').value.split('\n').map((l) => nums(l).join(',')).filter(Boolean).join('|');
-          const p = new URLSearchParams({ ship: ship ? ship.id : '', people: ui.getElementById('f_people').value, groups, fallback: ui.getElementById('f_fallbackAnySeat')?.checked ? '1' : '0' });
+          const p = new URLSearchParams({ ship: ship ? ship.id : '', people: ui.getElementById('f_people').value, groups, fallback: ui.getElementById('f_fallbackAnySeat')?.checked ? '1' : '0',
+            partial: ui.getElementById('f_partialSeats')?.checked ? '1' : '0', min: ui.getElementById('f_minPeople')?.value || '1' });
           e.currentTarget.href = `${SIM_URL}#${p}`;
           if (!ship) return;
           // 이 배의 실제 좌석 배치와 가장 가까운 예약 가능 날짜의 예약 현황도 함께 넘김.

@@ -259,7 +259,7 @@
     // 선택출항 예약: 낚시종류 고르기 (가격·최대 인원이 종류에 따라 달라질 수 있어 인원보다 먼저)
     // 키워드가 들어간 맨 위 종류, 없으면 화면에 선택된 종류 그대로
     const fishRadios = [...document.querySelectorAll('input[name="default_schedule_no"]')].filter((r) => !r.disabled);
-    const fishText = (r) => (r.parentElement?.parentElement?.textContent || '').replace(/\s+/g, ' ').trim();
+    const fishText = (r) => { const it = r.parentElement?.parentElement; return ((it?.querySelector('.fish') || it)?.textContent || '').replace(/\s+/g, ' ').trim(); };
     if (fishRadios.length && CONFIG.fishKeywords.length) {
       const fish = fishByKeyword(fishRadios, fishText);
       if (!fish) toast(`낚시종류 키워드(${CONFIG.fishKeywords.join(', ')})에 맞는 종류가 없어 화면에 선택된 종류로 진행합니다`);

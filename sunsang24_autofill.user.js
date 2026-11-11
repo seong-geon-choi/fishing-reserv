@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.15.1111-164009
+// @version      2.5.16.1111-164100
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -586,7 +586,7 @@
     // 선택출항 예약: 낚시종류 고르기 (가격·최대 인원이 종류에 따라 달라질 수 있어 인원보다 먼저)
     // 키워드가 들어간 맨 위 종류, 없으면 화면에 선택된 종류 그대로
     const fishRadios = [...document.querySelectorAll('input[name="default_schedule_no"]')].filter((r) => !r.disabled);
-    const fishText = (r) => (r.parentElement?.parentElement?.textContent || '').replace(/\s+/g, ' ').trim();
+    const fishText = (r) => { const it = r.parentElement?.parentElement; return ((it?.querySelector('.fish') || it)?.textContent || '').replace(/\s+/g, ' ').trim(); };
     if (fishRadios.length && CONFIG.fishKeywords.length) {
       const fish = fishByKeyword(fishRadios, fishText);
       if (!fish) toast(`낚시종류 키워드(${CONFIG.fishKeywords.join(', ')})에 맞는 종류가 없어 화면에 선택된 종류로 진행합니다`);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.6.3.1111-094105
+// @version      2.6.3.1111-094151
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -349,7 +349,7 @@
         <div class="pp-chips">${chips}</div>${warn}</div>`;
     }).join('');
     const total = pick.groups.reduce((a, g) => a + g.length, 0);
-    status(`좌석 고르기 중: ${pick.groups.length}개 그룹, ${total}자리. 오른쪽 창에서 고치고 "완료"를 누르세요.`);
+    status(`좌석 고르기 중: ${pick.groups.length}개 그룹, ${total}자리. 좌석 고르기 창에서 고치고 "완료"를 누르세요.`);
   }
 
   // 배 그림의 좌석 누르기: 없으면 지금 그룹에 추가, 이미 있으면 빼기

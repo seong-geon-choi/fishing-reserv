@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.7.0.1111-095411
+// @version      2.7.1.1111-101212
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -267,6 +267,22 @@
           const groups = ui.getElementById('f_seatGroups').value.split('\n').map((l) => nums(l).join(',')).filter(Boolean).join('|');
           const p = new URLSearchParams({ ship: ship ? ship.id : '', people: ui.getElementById('f_people').value, groups, fallback: ui.getElementById('f_fallbackAnySeat')?.checked ? '1' : '0' });
           e.currentTarget.href = `${SIM_URL}#${p}`;
+          if (!ship) return;
+          // 이 배의 실제 좌석 배치와 가장 가까운 예약 가능 날짜의 예약 현황도 함께 넘김.
+          // 가져오는 데 몇 초 걸리므로 새 탭을 먼저 열어 두고(팝업 차단 방지) 다 가져오면 주소를 넣음
+          e.preventDefault();
+          const w = window.open('', '_blank');
+          if (w) w.document.write('<p style="font:16px sans-serif;padding:24px">예약 사이트에서 좌석 배치를 가져오는 중…</p>');
+          siteLayout(ship.id).catch(() => null).then((lay) => {
+            if (lay && lay.seats.length) {
+              p.set('name', ship.name);
+              p.set('date', lay.ds);
+              p.set('layout', lay.seats.map((x) => `${x.slot}:${x.n}`).join(','));
+              p.set('taken', lay.seats.filter((x) => x.taken).map((x) => x.n).join(','));
+            }
+            const url = `${SIM_URL}#${p}`;
+            if (w) w.location.href = url; else window.open(url, '_blank');
+          });
         });
       }
     }
@@ -360,10 +376,21 @@
   const radiosIn = (doc) => [...doc.querySelectorAll('input[type=radio][name=PS_N_UID]')];
 
   // 예약 가능한 날짜 찾기: 오늘부터 하루씩(6개씩 묶어) 확인, 최대 60일 · 8개까지
-  async function findOpenDates(shipId, onFound) {
+  // 시뮬레이터로 넘길 배치: 가장 가까운 예약 가능 날짜 하나의 좌석 배치·예약 현황 (한 번 읽으면 기억)
+  const layoutCache = {};
+  async function siteLayout(shipId) {
+    if (layoutCache[shipId]) return layoutCache[shipId];
+    const dates = await findOpenDates(shipId, () => {}, 1, () => true);
+    if (!dates.length) return null;
+    layoutCache[shipId] = { ds: dates[0].ds, seats: await loadSeats(dates[0].url) };
+    return layoutCache[shipId];
+  }
+
+  // want: 찾을 날짜 수, alive: 계속 찾을지 (좌석 고르기 창을 닫으면 멈춤)
+  async function findOpenDates(shipId, onFound, want = 8, alive = () => !!pick) {
     const found = [];
     const today = new Date();
-    for (let i = 0; i < 60 && found.length < 8 && pick; i += 6) {
+    for (let i = 0; i < 60 && found.length < want && alive(); i += 6) {
       const batch = [];
       for (let j = i; j < i + 6 && j < 60; j++) {
         const d = new Date(today); d.setDate(today.getDate() + j);
@@ -376,7 +403,7 @@
           return { ds, url: stepUrl(`date=${dd}&PA_N_UID=${p}&PH_N_UID=${ph || 0}&PS_N_UID=${ps}`) };
         }).catch(() => null));
       }
-      for (const r of await Promise.all(batch)) if (r && found.length < 8) { found.push(r); onFound(found); }
+      for (const r of await Promise.all(batch)) if (r && found.length < want) { found.push(r); onFound(found); }
     }
     return found;
   }

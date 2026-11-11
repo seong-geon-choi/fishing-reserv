@@ -268,6 +268,9 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
   }
 
   const VER = 2; // 배치 저장 형식 버전
+  // 예약 스크립트가 예약 사이트에서 가져와 넘겨준 배(배치·예약 현황)는 'site' 탭으로 기억
+  const savedSite = store.get('sim.sitePreset');
+  if (savedSite && savedSite.slots) PRESETS.site = savedSite;
   let shipKey = store.get('sim.ship');
   if (!PRESETS[shipKey]) shipKey = 'manseok';
   const state = {};
@@ -283,18 +286,33 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
   const cur = () => loadShip(shipKey);
   const save = () => store.set('sim2.' + shipKey, cur());
 
-  // 예약 스크립트 설정 창의 "미리 보기" 링크로 들어온 경우: #ship=배번호&people=2&groups=8,9,7|2,3 를 적용
+  // 예약 스크립트 설정 창의 "미리 보기" 링크로 들어온 경우:
+  //   #ship=배번호&people=2&groups=8,9,7|2,3&fallback=1
+  //   (+ 예약 사이트에서 읽은 배치) &name=배이름&date=20261124&layout=칸:좌석,…&taken=좌석,…
   (() => {
     const h = new URLSearchParams(location.hash.slice(1));
     if (!h.has('ship') && !h.has('groups')) return;
-    const SHIP_IDS = { 3570: 'manseok', 2956: 'nadaese' };
-    shipKey = SHIP_IDS[h.get('ship')] || (h.has('ship') ? 'custom' : shipKey);
-    store.set('sim.ship', shipKey);
-    const s = cur();
-    if (h.has('groups')) s.groupsText = h.get('groups').split('|').map((g) => g.trim()).filter(Boolean).join('\n');
+    const groupsText = h.has('groups') ? h.get('groups').split('|').map((g) => g.trim()).filter(Boolean).join('\n') : null;
     const n = parseInt(h.get('people'), 10);
-    if (n > 0) s.people = n;
-    if (h.has('fallback')) s.fallback = h.get('fallback') === '1';
+    const layout = (h.get('layout') || '').split(',').map((x) => x.split(':').map(Number)).filter(([slot, seat]) => slot > 0 && seat > 0);
+    if (layout.length) {
+      // 사이트에서 가져온 실제 배치로 탭 만들기 (그 날 예약 현황 포함)
+      const slots = {};
+      for (const [slot, seat] of layout) slots[slot] = seat;
+      const taken = parseList(h.get('taken') || '').filter((x) => Object.values(slots).includes(x));
+      PRESETS.site = { name: h.get('name') || '가져온 배', cap: layout.length, slots, groups: [], people: n > 0 ? n : 2, taken, date: h.get('date') || '', shipId: h.get('ship') || '' };
+      store.set('sim.sitePreset', PRESETS.site);
+      shipKey = 'site';
+      state.site = { v: VER, slots: { ...slots }, groupsText: groupsText || '', people: n > 0 ? n : 2, fallback: h.get('fallback') !== '0', taken: taken.slice() };
+    } else {
+      const SHIP_IDS = { 3570: 'manseok', 2956: 'nadaese' };
+      shipKey = SHIP_IDS[h.get('ship')] || (h.has('ship') ? 'custom' : shipKey);
+      const s = cur();
+      if (groupsText !== null) s.groupsText = groupsText;
+      if (n > 0) s.people = n;
+      if (h.has('fallback')) s.fallback = h.get('fallback') === '1';
+    }
+    store.set('sim.ship', shipKey);
     save();
   })();
 
@@ -439,7 +457,9 @@ pre.cfg { margin: 0; background: var(--deck); border: 1px solid var(--line); bor
   Object.entries(PRESETS).forEach(([key, p]) => {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'tab'; b.setAttribute('role', 'tab'); b.dataset.key = key;
-    b.textContent = key === 'custom' ? p.name : `${p.name} (${p.cap}석)`;
+    b.textContent = key === 'custom' ? p.name
+      : key === 'site' ? `${p.name} (${p.cap}석${p.date ? ` · ${+p.date.slice(4, 6)}/${+p.date.slice(6, 8)} 현황` : ''})`
+      : `${p.name} (${p.cap}석)`;
     b.addEventListener('click', () => { shipKey = key; store.set('sim.ship', key); syncInputs(); render(); });
     $('shipTabs').appendChild(b);
   });

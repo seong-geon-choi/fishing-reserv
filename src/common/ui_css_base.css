@@ -32,4 +32,3 @@
       .auto { animation:autoblink-badge 1s steps(1) infinite; }
       @keyframes autoblink { 50% { border-color:rgba(224, 49, 49, .15); } }
       @keyframes autoblink-badge { 50% { background:#7a1515; } }
-      @media (prefers-reduced-motion: reduce) { .autoframe, .auto { animation:none; } }

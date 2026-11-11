@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.5.1111-155311
+// @version      2.5.6.1111-155737
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -157,7 +157,7 @@
   const $toasts = document.createElement('div');
   $toasts.className = 'toasts';
   ui.appendChild($toasts);
-  function toast(m, ms = 7000) {
+  function toast(m, ms = 14000) {
     console.log('[자동입력]', m);
     $toasts.style.top = $bar.offsetHeight + 8 + 'px';
     const t = document.createElement('div');

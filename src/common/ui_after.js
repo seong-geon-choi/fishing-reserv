@@ -9,7 +9,7 @@
   const $toasts = document.createElement('div');
   $toasts.className = 'toasts';
   ui.appendChild($toasts);
-  function toast(m, ms = 7000) {
+  function toast(m, ms = 14000) {
     console.log('[자동입력]', m);
     $toasts.style.top = $bar.offsetHeight + 8 + 'px';
     const t = document.createElement('div');

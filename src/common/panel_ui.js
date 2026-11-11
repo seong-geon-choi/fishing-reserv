@@ -12,6 +12,12 @@
   function addField(grid, f, c) {
     const id = 'f_' + f.key;
     const help = f.help ? `<span class="help">${f.help}</span>` : '';
+    if (f.inline) {
+      // 바로 앞 체크박스 줄 끝에 작은 입력칸으로 붙임 (예: 최소 인원 [1]명)
+      grid.lastElementChild.insertAdjacentHTML('beforeend', `<span class="inl">${f.label} <input id="${id}" type="number" inputmode="numeric">${f.unit || ''}</span>`);
+      ui.getElementById(id).value = toText(f, c[f.key]);
+      return;
+    }
     if (f.type === 'check') {
       grid.insertAdjacentHTML('beforeend', `<label class="c span${f.w || 4} ${f.danger ? 'danger' : ''}"><input type="checkbox" id="${id}" ${c[f.key] ? 'checked' : ''}><span>${f.label}${f.danger ? `<span class="help danger">${f.danger}</span>` : help}</span></label>`);
       return;

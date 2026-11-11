@@ -23,3 +23,5 @@
       .pickrow { margin:4px 0 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
       .pickrow button { padding:4px 10px; font-size:12px; }
       .btns { margin-top:12px; }
+      label.c .inl { margin-left:auto; display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
+      label.c .inl input { width:56px; }

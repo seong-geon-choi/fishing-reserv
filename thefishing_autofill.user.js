@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.12.1111-163026
+// @version      2.8.13.1111-163316
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -45,8 +45,8 @@
     { key: 'name', w: 1, label: '예약자명', type: 'text', required: true },
     { key: 'depositor', w: 1, label: '입금자명', type: 'text', help: '예약자와 다를 때만' },
     { key: 'tel', w: 1, label: '휴대폰 번호', type: 'phone', required: true, help: '010-1234-5678' },
-    { key: 'partialSeats', w: 3, label: '좌석이 인원보다 적으면 남은 좌석만큼만 예약', type: 'check', help: '끄면 좌석이 모자랄 때 자동 신청하지 않고 안내만 합니다' },
-    { key: 'minPeople', w: 1, label: '최소 인원', type: 'number', min: 1, max: 30, help: '남은 좌석만큼 예약할 때 이 인원 이상이어야 진행' },
+    { key: 'partialSeats', w: 4, label: '좌석이 인원보다 적으면 남은 좌석만큼만 예약', type: 'check', help: '끄면 좌석이 모자랄 때 자동 신청하지 않고 안내만 합니다. 켜면 최소 인원 이상일 때만 진행' },
+    { key: 'minPeople', inline: true, unit: '명', label: '최소 인원', type: 'number', min: 1, max: 30 },
     { key: 'fishKeywords', w: 2, perShip: true, label: '낚시종류 키워드', type: 'list', help: '쉼표로 구분. 하나라도 들어간 맨 위 종류, 비우면 첫 번째' },
     { key: 'seatGroups', w: 2, perShip: true, label: '좌석 그룹', type: 'groups', help: '한 줄에 그룹 하나 (예: 7, 8, 9), 위쪽이 우선' },
     { key: 'fallbackAnySeat', w: 4, perShip: true, label: '그룹으로 인원을 못 채우면 남은 좌석으로 채우기', type: 'check' },
@@ -177,6 +177,8 @@
       .pickrow { margin:4px 0 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
       .pickrow button { padding:4px 10px; font-size:12px; }
       .btns { margin-top:12px; }
+      label.c .inl { margin-left:auto; display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
+      label.c .inl input { width:56px; }
       .simlink { font-size:12px; font-weight:700; color:#1c6fb8; }
       .pickpanel { position:fixed; left:50%; top:52px; transform:translateX(-50%); width:min(1120px, calc(100vw - 16px)); max-height:calc(100vh - 60px); overflow:auto;
         background:#fff; color:#1f2933; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.3); padding:0 14px 12px; font-size:13px; font-weight:400; }
@@ -292,6 +294,12 @@
   function addField(grid, f, c) {
     const id = 'f_' + f.key;
     const help = f.help ? `<span class="help">${f.help}</span>` : '';
+    if (f.inline) {
+      // 바로 앞 체크박스 줄 끝에 작은 입력칸으로 붙임 (예: 최소 인원 [1]명)
+      grid.lastElementChild.insertAdjacentHTML('beforeend', `<span class="inl">${f.label} <input id="${id}" type="number" inputmode="numeric">${f.unit || ''}</span>`);
+      ui.getElementById(id).value = toText(f, c[f.key]);
+      return;
+    }
     if (f.type === 'check') {
       grid.insertAdjacentHTML('beforeend', `<label class="c span${f.w || 4} ${f.danger ? 'danger' : ''}"><input type="checkbox" id="${id}" ${c[f.key] ? 'checked' : ''}><span>${f.label}${f.danger ? `<span class="help danger">${f.danger}</span>` : help}</span></label>`);
       return;

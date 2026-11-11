@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.1.1111-130059
+// @version      2.5.2.1111-141557
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -313,25 +313,48 @@
     showStart('대기를 중지했습니다. 다시 하려면 "예약 대기 시작"을 누르세요.');
   };
 
+  // 로그인 확인: 마이페이지에 "로그아웃" 메뉴가 있으면 로그인 상태 (선상24는 배 사이트 주소마다 로그인이 따로)
+  async function loggedIn() {
+    try {
+      const html = await fetch('/mypage/my', { cache: 'no-store' }).then((r) => r.text());
+      return />\s*로그아웃\s*</.test(html);
+    } catch (e) { return null; } // 확인 실패(혼잡 등)는 로그아웃으로 보지 않음
+  }
+  const LOGIN_MSG = `이 배 사이트(${location.hostname})에 로그인되어 있지 않습니다. 로그인한 뒤 이 화면을 새로고침하세요.`;
+
   async function waitOnSchedule() {
     const my = ++runId;
     stopped = false;
     const dead = () => stopped || my !== runId;
     stopBtn.hidden = false;
+    // 대기 중 로그인이 풀리면 멈추고 알림 (풀린 채로 예약 화면에 가면 예약할 수 없음)
+    const loginLost = async () => {
+      if ((await loggedIn()) !== false || dead()) return false;
+      stopped = true;
+      stopBtn.hidden = true;
+      status('로그인이 풀려 대기를 멈췄습니다. ' + LOGIN_MSG + ' 그다음 "예약 대기 시작"을 다시 누르세요.');
+      return true;
+    };
     const label = `${M}월 ${D}일${shipNames.length ? ` ${shipNames.join('/')}` : ''}${CONFIG.openAt ? ` / 오픈 ${fmtTime(CONFIG.openAt)}` : ''}`;
     if (CONFIG.openAt) {
       // 오픈 시각까지는 요청 없이 카운트다운만 (서버 시계 기준)
       status('서버 시계를 확인하는 중…');
       await syncClock();
       const startAt = new Date(CONFIG.openAt).getTime() - CONFIG.startBeforeSec * 1000;
+      let nextLoginCheck = 0; // 시작할 때, 그 뒤 5분마다 로그인 확인
       while (serverNow() < startAt) {
         if (dead()) return;
+        if (Date.now() >= nextLoginCheck) {
+          nextLoginCheck = Date.now() + 5 * 60 * 1000;
+          if (await loginLost()) return;
+        }
         const s = Math.ceil((startAt - serverNow()) / 1000);
         const hms = new Date(s * 1000).toISOString().slice(11, 19);
         $msg.textContent = `${label} / 확인 시작까지 ${s >= 86400 ? Math.floor(s / 86400) + '일 ' : ''}${hms} (요청 없음)${offsetNote()}`;
         await sleep(Math.min(1000, startAt - serverNow()));
       }
     }
+    if (await loginLost()) return; // 확인 요청을 시작하기 직전에 한 번 더
     const url = await pollOverlap(async (signal) => {
       // 하루치 일정(사이트가 예약 완료 후 쓰는 요청)만 받아 확인: 한 달치 페이지보다 15~20배 작음
       const r = await fetch(`/ship/schedule_fleet/${CONFIG.date}/0/simple_day1`, { cache: 'no-store', signal });
@@ -509,7 +532,7 @@
       stopBtn.onclick = () => { stopped = true; stopBtn.hidden = true; status('다시 열기를 중지했습니다. 예약 화면을 직접 새로고침하면 "자동입력 시작" 버튼이 나옵니다.'); };
       reloadSoon('예약 화면이 제대로 열리지 않았습니다.', () => { try { sessionStorage.setItem(FLAG, scheduleNo); } catch (e) { /* 무시 */ } });
     }
-    else if (loggedOut) status('선상24에 로그인되어 있지 않습니다. 로그인한 뒤 이 화면을 새로고침하세요.');
+    else if (loggedOut) status(LOGIN_MSG);
     else if (!document.getElementById('btn_payment')) status('예약 화면이 제대로 열리지 않았습니다. 새로고침(F5)하세요.');
     else {
       // 사이트의 "바로예약"으로 직접 연 화면: 버튼을 눌러야 입력 (설정을 먼저 확인·변경할 수 있게, 자동 신청은 하지 않음)
@@ -523,8 +546,9 @@
   else showStart();
 
   // 일정 페이지는 평소에도 여는 곳이라, 버튼을 눌러야 대기를 시작 (설정을 먼저 확인·변경할 수 있게)
-  function showStart(msg) {
+  async function showStart(msg) {
     if (new Date(CONFIG.date + 'T23:59:59') < new Date()) { status(`출조일(${CONFIG.date})이 이미 지났습니다. 설정에서 날짜를 바꾸세요.`); return; }
+    if ((await loggedIn()) === false) { status(LOGIN_MSG); return; }
     const ship = shipNames.length ? ` ${shipNames.join('/')}` : '';
     status(msg || `${M}월 ${D}일${ship}: 설정을 확인하고 준비되면 "예약 대기 시작"을 누르세요.`);
     const btn = ui.querySelector('.start');

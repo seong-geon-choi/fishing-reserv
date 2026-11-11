@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.16.1111-164747
+// @version      2.8.17.1111-170058
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -259,7 +259,17 @@
   function toast(m, ms = 14000) {
     console.log('[자동입력]', m);
     if ([...$toasts.children].some((t) => t.textContent === m && t.style.opacity !== '0')) return; // 같은 안내가 떠 있으면 쌓지 않음
-    $toasts.style.top = $bar.offsetHeight + 8 + 'px';
+    // 설정 창이 열려 있으면 설정 창 제목줄 바로 아래 가운데에, 아니면 상태 바 아래 화면 가운데에
+    const head = !panel.hidden && panel.querySelector('.phead');
+    if (head) {
+      const p = panel.getBoundingClientRect();
+      $toasts.style.top = head.getBoundingClientRect().bottom + 6 + 'px';
+      $toasts.style.left = p.left + p.width / 2 + 'px';
+      $toasts.style.width = Math.min(560, p.width - 32) + 'px';
+    } else {
+      $toasts.style.top = $bar.offsetHeight + 8 + 'px';
+      $toasts.style.left = $toasts.style.width = '';
+    }
     const t = document.createElement('div');
     t.className = 'toast';
     t.textContent = m;

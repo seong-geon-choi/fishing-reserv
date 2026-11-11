@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.7.3.1111-105420
+// @version      2.7.4.1111-105446
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -169,7 +169,6 @@
       .pp-chip { display:inline-flex; align-items:center; gap:3px; border-radius:11px; padding:1px 4px 1px 8px; color:#fff; font-weight:700; font-size:12px; }
       .pp-chip { cursor:grab; touch-action:none; user-select:none; }
       .pp-chip.dragging { opacity:.55; outline:2px dashed #1f2933; cursor:grabbing; }
-      .pp-ord { font-style:normal; font-size:10px; font-weight:700; background:rgba(255,255,255,.3); border-radius:6px; padding:0 4px; }
       .pp-chip button { border:0; background:rgba(255,255,255,.25); color:#fff; border-radius:50%; width:16px; height:16px; padding:0; font-size:11px; line-height:16px; }
       .pp-empty { color:#9aa5b1; font-size:12px; }
       .pp-warn { color:#b45309; font-size:11px; margin-top:3px; }
@@ -465,7 +464,7 @@
     pp.querySelector('.pp-hint').textContent = people ? `예약 인원 ${people}명: 그룹마다 ${people}자리 이상 고르면 그 그룹 안에서 자리를 잡습니다.` : '';
     pp.querySelector('.pp-groups').innerHTML = pick.groups.map((g, i) => {
       const chips = g.length
-        ? g.map((n, k) => `<span class="pp-chip" data-g="${i}" data-n="${n}" style="background:${gColor(i)}" title="끌어서 순서 바꾸기"><i class="pp-ord">${k + 1}</i>${n}<button type="button" data-g="${i}" data-n="${n}" title="${n}번 빼기">×</button></span>`).join('')
+        ? g.map((n) => `<span class="pp-chip" data-g="${i}" data-n="${n}" style="background:${gColor(i)}" title="끌어서 순서 바꾸기">${n}<button type="button" data-g="${i}" data-n="${n}" title="${n}번 빼기">×</button></span>`).join('')
         : '<span class="pp-empty">배 그림에서 좌석을 누르세요</span>';
       const warn = g.length && people && g.length < people ? `<div class="pp-warn">인원 ${people}명보다 적어서 이 그룹만으로는 자리를 다 잡지 못합니다</div>` : '';
       return `<div class="pp-group ${i === pick.active ? 'active' : ''}" data-g="${i}" style="border-color:${i === pick.active ? gColor(i) : ''}">
@@ -528,8 +527,6 @@
     const r = over.getBoundingClientRect();
     const after = e.clientY > r.bottom || (e.clientY >= r.top && e.clientX > r.left + r.width / 2);
     chipDrag.box.insertBefore(chipDrag.chip, after ? over.nextSibling : over);
-    // 끄는 동안에도 칩의 순서 번호를 갱신
-    chipDrag.box.querySelectorAll('.pp-ord').forEach((o, k) => { o.textContent = k + 1; });
   });
   const endChipDrag = () => {
     if (!chipDrag) return;

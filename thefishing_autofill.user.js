@@ -136,7 +136,7 @@
       .pick { display:flex; flex-wrap:wrap; gap:6px; }
       .pick[hidden] { display:none; }
       /* 떠 있는 설정 창 + 한 화면 격자 배치 */
-      .panel { position:fixed; margin:0; width:min(820px, calc(100vw - 16px)); max-height:calc(100vh - 16px); border-radius:10px; padding:0 16px 14px; }
+      .panel { position:fixed; margin:0; max-width:none; width:min(820px, calc(100vw - 16px)); max-height:calc(100vh - 16px); border-radius:10px; padding:0 16px 14px; }
       .phead { display:flex; align-items:center; gap:8px; margin:0 -16px 8px; padding:9px 12px 9px 16px; background:#1f2933; color:#fff;
         border-radius:10px 10px 0 0; cursor:move; user-select:none; touch-action:none; position:sticky; top:0; z-index:1; }
       .phead b { font-size:15px; }

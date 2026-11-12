@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.25.1112-174739
+// @version      2.5.26.1112-175132
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -47,7 +47,7 @@
     { key: 'minPeople', inline: true, unit: '명', label: '최소 인원', type: 'number', min: 1, max: 30 },
     { key: 'seatGroups', w: 2, label: '좌석 그룹 (좌석 선택이 있는 배만)', type: 'groups', help: '한 줄에 그룹 하나 (예: 2, 3, 4), 위쪽이 우선. 예약 화면의 자리배치도 그림 번호를 보고 적으세요. 좌석 선택이 없는 배에서는 무시' },
     { key: 'fallbackAnySeat', w: 4, label: '그룹으로 인원을 못 채우면 남은 좌석으로 채우기', type: 'check' },
-    { key: 'openAt', w: 2, label: '예약 오픈 시각', type: 'datetime', help: '비우면 시작하자마자 확인' },
+    { key: 'openAt', w: 2, label: '예약 오픈 시각', type: 'datetime', help: '비우면 시작할 때 한 번만 확인 (안 열렸으면 안내하고 멈춤)' },
     { key: 'startBeforeSec', w: 1, label: '몇 초 전부터 확인', type: 'number', min: 5, max: 600 },
     { key: 'pollMs', w: 1, label: '확인 간격(ms)', type: 'number', min: 500, max: 10000, help: '1000 이상 권장' },
     { key: 'autoSubmit', w: 4, label: '"예약하기"와 확인창까지 자동으로 누르기', type: 'check', danger: '켜면 확인 없이 실제로 예약됩니다. 연습할 때는 끄세요.' },

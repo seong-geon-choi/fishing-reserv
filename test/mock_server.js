@@ -15,6 +15,8 @@ const S = {
   openAt: Date.now(), // 이 시각부터 예약이 열림
   slowMs: 0, // 오픈 확인 요청 응답 지연
   broken: 0, // 남은 횟수만큼 예약 화면을 깨진 채로 보냄
+  dayFail: false, // 선상24 하루치 일정 요청을 실패(500)로
+  hits: {}, // 경로별 요청 수 (스크립트가 사이트에 얼마나 요청하는지 확인용)
   block: false, // 모든 페이지를 403으로
   // 더피싱
   tfTaken: new Set([3, 9]), // 만석호 이미 예약된 좌석
@@ -168,17 +170,19 @@ function admin(q) {
   if (q.has('slow')) S.slowMs = +q.get('slow');
   if (q.has('broken')) S.broken = +q.get('broken');
   if (q.has('block')) S.block = q.get('block') === '1';
+  if (q.has('dayFail')) S.dayFail = q.get('dayFail') === '1';
+  if (q.has('hits')) S.hits = {};
   if (q.has('tfTaken')) S.tfTaken = new Set(q.get('tfTaken').split(',').filter(Boolean).map(Number));
   if (q.has('tfRemain')) S.tfRemain = +q.get('tfRemain');
   if (q.has('ssLoggedIn')) S.ssLoggedIn = q.get('ssLoggedIn') === '1';
   if (q.has('ssRemain')) S.ssRemain = +q.get('ssRemain');
   if (q.has('ssTaken')) S.ssTaken = new Set(q.get('ssTaken').split(',').filter(Boolean).map(Number));
   if (q.has('reset')) { S.log = []; S.tfChosen.clear(); tfPending = null; }
-  const state = { openIn: Math.round((S.openAt - Date.now()) / 1000), open: isOpen(), slowMs: S.slowMs, broken: S.broken, block: S.block,
+  const state = { hits: S.hits, dayFail: S.dayFail, openIn: Math.round((S.openAt - Date.now()) / 1000), open: isOpen(), slowMs: S.slowMs, broken: S.broken, block: S.block,
     tfTaken: [...S.tfTaken], tfChosen: [...S.tfChosen], tfRemain: S.tfRemain, ssLoggedIn: S.ssLoggedIn, ssRemain: S.ssRemain, ssTaken: [...S.ssTaken], log: S.log };
   if (q.get('json') === '1') return { json: state };
   return page('연습용 사이트 관리', `<h2>연습용 사이트 관리</h2><pre>${JSON.stringify(state, null, 2)}</pre>
-    <p>바꾸기 예: <code>/__admin?open=60</code> (60초 뒤 오픈), <code>?tfTaken=3,9</code>, <code>?tfRemain=2</code>, <code>?ssRemain=12</code>, <code>?ssLoggedIn=0</code>, <code>?slow=8000</code>, <code>?broken=1</code>, <code>?block=1</code>, <code>?reset=1</code>, <code>?json=1</code></p>
+    <p>바꾸기 예: <code>/__admin?open=60</code> (60초 뒤 오픈), <code>?tfTaken=3,9</code>, <code>?tfRemain=2</code>, <code>?ssRemain=12</code>, <code>?ssLoggedIn=0</code>, <code>?slow=8000</code>, <code>?broken=1</code>, <code>?block=1</code>, <code>?dayFail=1</code>, <code>?hits=0</code> (요청 수 초기화), <code>?reset=1</code>, <code>?json=1</code></p>
     <ul><li><a href="/index.php?mid=bk">더피싱 예약 목록</a></li><li><a href="/ship/schedule_fleet">선상24 일정 페이지</a></li></ul>`);
 }
 
@@ -186,6 +190,7 @@ function admin(q) {
 http.createServer(async (req, res) => {
   const u = new URL(req.url, `http://localhost:${PORT}`);
   const p = u.pathname, q = u.searchParams;
+  if (!p.startsWith('/__') && !/\.user\.js$/.test(p)) S.hits[p] = (S.hits[p] || 0) + 1;
   try {
     if (p === '/__admin') { const r = admin(q); return r.json ? (res.writeHead(200, { 'Content-Type': 'application/json' }), res.end(JSON.stringify(r.json))) : send(res, 200, r); }
     if (p === '/__done') return send(res, 200, page('예약 완료', `<h2>예약 완료 (연습용, ${q.get('site')})</h2><p><a href="/__admin">관리 화면에서 접수 내역 보기</a></p>`));
@@ -215,7 +220,7 @@ http.createServer(async (req, res) => {
     }
     // 선상24
     if (/^\/ship\/schedule_fleet(\/\d{6})?$/.test(p)) return send(res, 200, ssSchedule());
-    if (/^\/ship\/schedule_fleet\/\d{4}-\d{2}-\d{2}\/0\/simple_day1$/.test(p)) { if (S.slowMs) await sleep(S.slowMs); return send(res, 200, p.includes(SS_DATE) ? ssRow() : ''); }
+    if (/^\/ship\/schedule_fleet\/\d{4}-\d{2}-\d{2}\/0\/simple_day1$/.test(p)) { if (S.slowMs) await sleep(S.slowMs); if (S.dayFail) return send(res, 500, 'error'); return send(res, 200, p.includes(SS_DATE) ? ssRow() : ''); }
     if (p === '/mypage/my') return send(res, 200, page('마이페이지', S.ssLoggedIn ? '<a href="#">로그아웃</a>' : '<a href="#">로그인</a>'));
     if (p === '/mypage/reservation_ready/5001') return send(res, 200, ssReserve());
     if (p === '/mypage/reservation_end/1') {

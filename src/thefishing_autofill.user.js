@@ -63,7 +63,7 @@
 //@@include fields_partial.js
     { key: 'seatGroups', w: 2, perShip: true, label: '좌석 그룹', type: 'groups', help: '한 줄에 그룹 하나 (예: 7, 8, 9), 위쪽이 우선' },
     { key: 'fallbackAnySeat', w: 4, perShip: true, label: '그룹으로 인원을 못 채우면 남은 좌석으로 채우기', type: 'check' },
-    { key: 'openAt', w: 2, label: '예약 오픈 시각', type: 'datetime', help: '비우면 시작하자마자 확인' },
+    { key: 'openAt', w: 2, label: '예약 오픈 시각', type: 'datetime', help: '비우면 시작할 때 한 번만 확인 (안 열렸으면 안내하고 멈춤)' },
     { key: 'startBeforeSec', w: 1, label: '몇 초 전부터 확인', type: 'number', min: 5, max: 600 },
     { key: 'pollMs', w: 1, label: '확인 간격(ms)', type: 'number', min: 500, max: 10000, help: '1000 이상 권장' },
     { key: 'autoSubmit', w: 4, label: '예약확인 단계의 마지막 "예약 신청하기"까지 자동으로 누르기 (최종 예약)', type: 'check', danger: '켜면 확인 없이 실제로 예약됩니다. 연습할 때는 끄세요.' },

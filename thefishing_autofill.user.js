@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.20.1112-155530
+// @version      2.8.21.1112-155609
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -40,7 +40,7 @@
   };
   const FIELDS = [
     { key: 'date', w: 1, label: '출조일', type: 'date', help: '목록 페이지에서 시작할 때 사용' },
-    { key: 'shipName', w: 2, label: '배 이름', type: 'list', help: '이 예약 목록에 나오는 배 중에서 선택',
+    { key: 'shipName', w: 2, label: '배 이름', type: 'list', help: '이 예약 목록에 나오는 배 중에서 선택 (없으면 맨 아래 "직접 입력…")',
       // 예약 목록의 배 이름 (뒤의 "(20)" 같은 숫자는 바뀌므로 뺌)
       choices: () => SHIPS.map((s) => s.name.replace(/\(\d+\)$/, '')) },
     { key: 'fishKeywords', w: 1, perShip: true, label: '낚시종류 키워드', type: 'list', help: '쉼표로 구분. 하나라도 들어간 맨 위 종류(비우면 첫 번째). 배마다 따로 저장' },

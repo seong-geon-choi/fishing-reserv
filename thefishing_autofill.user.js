@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.23.1112-163644
+// @version      2.8.24.1112-173442
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -67,7 +67,7 @@
     { key: 'openAt', w: 2, label: '예약 오픈 시각', type: 'datetime', help: '비우면 시작하자마자 확인' },
     { key: 'startBeforeSec', w: 1, label: '몇 초 전부터 확인', type: 'number', min: 5, max: 600 },
     { key: 'pollMs', w: 1, label: '확인 간격(ms)', type: 'number', min: 500, max: 10000, help: '1000 이상 권장' },
-    { key: 'autoSubmit', w: 4, label: '"예약 신청하기"·확인창·예약확인 단계의 "예약 신청하기"까지 자동으로 누르기 (최종 예약)', type: 'check', danger: '켜면 확인 없이 실제로 예약됩니다. 연습할 때는 끄세요.' },
+    { key: 'autoSubmit', w: 4, label: '예약확인 단계의 마지막 "예약 신청하기"까지 자동으로 누르기 (최종 예약)', type: 'check', danger: '켜면 확인 없이 실제로 예약됩니다. 연습할 때는 끄세요.' },
   ];
   // =====================================================
 
@@ -1130,21 +1130,20 @@
       status(`${seats}: 사이트 응답이 없어 인원·금액이 확인되지 않았습니다. 화면의 인원과 금액을 확인하고 직접 신청하세요.`);
       return;
     }
-    if (CONFIG.autoSubmit) {
-      status(`${seats}, 인원 ${document.getElementById('BI_IN').value}명으로 예약 신청 중…`);
-      if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
-      // 사이트 확인창: "예약 신청하기 하시겠습니까?"는 확인하고, 그 순간 예약확인(2단계) 화면에서 마지막 버튼을 누르라는 표시를 남김.
-      // 대기자 확인창은 취소 (대기자로 신청하지 않음). 사이트 검증에 걸리면 확인창이 뜨지 않아 표시도 남지 않음
-      window.confirm = (m) => {
-        if (/대기자/.test(m)) { toast(`대기자 확인창이 떠서 자동 신청을 멈췄습니다: ${m}`); return false; }
-        try { sessionStorage.setItem(STEP2_KEY, JSON.stringify({ target: `${date}|${pa}`, t: Date.now() })); } catch (e) { /* 무시 */ }
-        console.log('[자동입력] 확인창 자동 승인:', m);
-        return true;
-      };
-      btn.click(); // 사이트의 form_check 검증 → 확인창 → 예약확인 화면으로
-      return;
-    }
-    status(`입력 완료: ${seats}, 인원 ${document.getElementById('BI_IN').value}명. 내용을 확인하고 빨간 테두리 버튼을 누르세요.`);
+    // 1단계는 예약확인 화면으로 넘어갈 뿐 예약이 되지 않으므로 항상 자동으로 넘김 (최종 신청은 2단계에서 설정에 따라)
+    status(`${seats}, 인원 ${document.getElementById('BI_IN').value}명: 예약확인 단계로 넘어가는 중…`);
+    if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
+    // 사이트 확인창("예약 신청하기/예약내용확인 하시겠습니까?")은 확인하고, 그 순간 예약확인(2단계) 화면에서 동작하라는 표시를 남김.
+    // 대기자 확인창은 취소 (대기자로 신청하지 않음). 사이트 검증에 걸리면 확인창이 뜨지 않아 표시도 남지 않음
+    window.confirm = (m) => {
+      if (/대기자/.test(m)) { toast(`대기자 확인창이 떠서 넘어가지 않았습니다: ${m}`); return false; }
+      try { sessionStorage.setItem(STEP2_KEY, JSON.stringify({ target: `${date}|${pa}`, t: Date.now() })); } catch (e) { /* 무시 */ }
+      console.log('[자동입력] 확인창 자동 승인:', m);
+      return true;
+    };
+    // 사이트 검증 경고창(예: 좌석 수 불일치)은 화면을 멈추지 않게 토스트로
+    window.alert = (m) => { toast(`사이트 안내: ${m} 화면을 확인하고 직접 진행하세요.`); status(`입력 완료: ${seats}. 사이트 안내: ${m}`); };
+    btn.click(); // 사이트의 form_check 검증 → 확인창 → 예약확인 화면으로
   }
 
   // 필수 정보가 없으면 설정부터
@@ -1174,8 +1173,8 @@
     btn.onclick = () => { btn.hidden = true; panel.hidden = true; arm(`${date}|${pa}`); runStep1(); };
   }
 
-  // 4) 예약확인(2단계): 마지막 "예약 신청하기" (이 화면은 확인창 없이 바로 최종 신청됨).
-  // 1단계를 자동으로 보낸 경우에만 여기까지 옴 (맨 위에서 확인)
+  // 4) 예약확인(2단계): 마지막 "예약 신청하기" (이 화면은 확인창 없이 바로 최종 신청됨). 자동으로 누르기가 켜져 있을 때만 누름.
+  // 스크립트가 1단계를 보낸 경우에만 여기까지 옴 (맨 위에서 확인)
   async function runStep2() {
     const btn = document.getElementById('submit');
     if (!btn || !CONFIG.autoSubmit) {

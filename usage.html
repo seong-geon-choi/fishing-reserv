@@ -484,6 +484,7 @@ footer { color: var(--muted); font-size: .85rem; }
 
     <footer>
       <p>관리자: 스크립트는 <code>src/</code>에서 고칩니다. 두 사이트 공통 코드(설정 창, 상태 바, 서버 시계, 겹쳐 보내기, 카운트다운, 다시 열기)는 <code>src/common/</code>에만 있습니다. 고친 뒤 <code>node build.js</code>를 실행하면 맨 위의 두 <code>.user.js</code> 파일이 만들어지고, 바뀐 파일의 <code>@version</code>이 <code>기본버전.월일-시분초</code> 형식(예: <code>2.5.1.1110-225502</code>)으로 자동으로 올라갑니다(기본버전 마지막 자리 +1). 그다음 GitHub <code>main</code>에 올리세요. 업데이트 여부는 기본버전으로 정해집니다(월일-시분초는 연도가 없어 해가 바뀌면 숫자가 작아지기 때문). 개인정보는 코드에 넣지 않습니다. 저장소: <a href="https://github.com/seong-geon-choi/fishing-reserv" target="_blank" rel="noopener">seong-geon-choi/fishing-reserv</a></p>
+      <p>관리자: 시험은 실제 사이트 대신 <b>연습용 가짜 사이트</b>에서 하세요. <code>node test/mock_server.js</code>를 실행하고 <code>http://localhost:8787/__admin</code>을 열면 더피싱·선상24와 같은 구조의 화면에서 두 스크립트가 그대로 동작합니다(자동 신청까지 시험해도 실제 예약이 생기지 않음). 오픈 시각, 예약된 좌석, 남은 인원, 로그인, 응답 지연, 화면 깨짐, 차단(403)을 관리 화면 주소로 바꿀 수 있습니다. Tampermonkey의 스크립트는 연습용 사이트에서 돌지 않으므로, 연습용 사이트는 Tampermonkey를 켠 채로 열어도 됩니다.</p>
     </footer>
   </main>
 </div>

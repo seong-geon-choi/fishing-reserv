@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.27.1112-175132
+// @version      2.8.28.1112-175321
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -847,6 +847,8 @@
   function fishByKeyword(items, textOf) {
     return items.find((it) => CONFIG.fishKeywords.some((k) => textOf(it).includes(k))) || null;
   }
+  // 낚시종류가 모두 마감(선택 불가)일 때는 진행하지 않고 안내
+  const NO_FISH_MSG = '선택할 수 있는 낚시종류가 없습니다(모두 마감). 화면을 확인하세요.';
   // 낚시종류가 선택된 예약 화면 주소 (사이트의 ps_url(date, PA, PH, PS)과 같은 주소)
   function fishUrl(radio) {
     const m = (radio.getAttribute('onclick') || '').match(/ps_url\('(\d+)',\s*'(\d+)',\s*'(\d*)',\s*'(\d+)'\)/);
@@ -1036,6 +1038,7 @@
     // 받은 화면에서 낚시종류를 골라, 그 종류가 선택된 예약 화면으로 바로 이동 (새로고침 + 선택 페이지 로딩 2번 → 1번)
     stopBtn.hidden = true;
     const pick = pickFish(radios);
+    if (!pick) { status(NO_FISH_MSG); toast(NO_FISH_MSG); return; }
     status(`오픈 감지! 낚시종류 "${fishLabel(pick)}" 화면으로 이동합니다…`);
     location.href = fishUrl(pick);
   }
@@ -1043,6 +1046,7 @@
   // 2) 이미 열린 화면에서 낚시종류 선택
   function selectFish() {
     const pick = pickFish(fishRadios());
+    if (!pick) { status(NO_FISH_MSG); toast(NO_FISH_MSG); return; }
     status('낚시종류 선택: ' + fishLabel(pick));
     location.href = fishUrl(pick);
   }

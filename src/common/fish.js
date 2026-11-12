@@ -2,3 +2,5 @@
   function fishByKeyword(items, textOf) {
     return items.find((it) => CONFIG.fishKeywords.some((k) => textOf(it).includes(k))) || null;
   }
+  // 낚시종류가 모두 마감(선택 불가)일 때는 진행하지 않고 안내
+  const NO_FISH_MSG = '선택할 수 있는 낚시종류가 없습니다(모두 마감). 화면을 확인하세요.';

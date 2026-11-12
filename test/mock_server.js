@@ -22,6 +22,7 @@ const S = {
   tfTaken: new Set([3, 9]), // 만석호 이미 예약된 좌석
   tfChosen: new Set(), // 이 브라우저가 눌러 둔 좌석 (실제 사이트는 세션에 기억)
   tfRemain: 2, // 팀루피호(좌석 없는 배) 남은 자리
+  tfFishClosed: false, // 낚시종류 모두 마감(선택 불가)
   // 선상24
   ssLoggedIn: true,
   ssRemain: 12, // 남은 승선 인원
@@ -59,8 +60,8 @@ function tfStep1(q) {
   if (!ship || !isOpen()) return page('예약1단계', '예약할 수 없는 날짜이거나 예약권한이 없습니다', 'thefishing_autofill.user.js');
   const title = `${ship.name} > 예약1단계`;
   const fish = `<table><tr><th>낚시종류(남은자리)</th></tr>
-    <tr><td><input type="radio" name="PS_N_UID" value="100" ${ps === '100' ? 'checked' : ''} onclick="ps_url('${date}','${pa}','0','100')"> 쭈꾸미(${ship.seats ? ship.seats - S.tfTaken.size : S.tfRemain}명)</td></tr>
-    <tr><td><input type="radio" name="PS_N_UID" value="101" ${ps === '101' ? 'checked' : ''} onclick="ps_url('${date}','${pa}','0','101')"> 갑오징어(${ship.seats ? ship.seats - S.tfTaken.size : S.tfRemain}명)</td></tr></table>
+    <tr><td><input type="radio" name="PS_N_UID" value="100" ${S.tfFishClosed ? "disabled" : ""} ${ps === '100' ? 'checked' : ''} onclick="ps_url('${date}','${pa}','0','100')"> 쭈꾸미(${ship.seats ? ship.seats - S.tfTaken.size : S.tfRemain}명)</td></tr>
+    <tr><td><input type="radio" name="PS_N_UID" value="101" ${S.tfFishClosed ? "disabled" : ""} ${ps === '101' ? 'checked' : ''} onclick="ps_url('${date}','${pa}','0','101')"> 갑오징어(${ship.seats ? ship.seats - S.tfTaken.size : S.tfRemain}명)</td></tr></table>
     <form name="ps_form"><input type="hidden" name="PS_N_UID" value="${ps || ''}"></form>
     <script>function ps_url(d,p,h,s){ location.href='./popup.step1.php?date='+d+'&PA_N_UID='+p+'&PH_N_UID='+h+'&PS_N_UID='+s; }</script>`;
   if (!ps) return page(title, `<h2>${title}</h2>${fish}`, 'thefishing_autofill.user.js');
@@ -174,15 +175,16 @@ function admin(q) {
   if (q.has('hits')) S.hits = {};
   if (q.has('tfTaken')) S.tfTaken = new Set(q.get('tfTaken').split(',').filter(Boolean).map(Number));
   if (q.has('tfRemain')) S.tfRemain = +q.get('tfRemain');
+  if (q.has('tfFishClosed')) S.tfFishClosed = q.get('tfFishClosed') === '1';
   if (q.has('ssLoggedIn')) S.ssLoggedIn = q.get('ssLoggedIn') === '1';
   if (q.has('ssRemain')) S.ssRemain = +q.get('ssRemain');
   if (q.has('ssTaken')) S.ssTaken = new Set(q.get('ssTaken').split(',').filter(Boolean).map(Number));
   if (q.has('reset')) { S.log = []; S.tfChosen.clear(); tfPending = null; }
   const state = { hits: S.hits, dayFail: S.dayFail, openIn: Math.round((S.openAt - Date.now()) / 1000), open: isOpen(), slowMs: S.slowMs, broken: S.broken, block: S.block,
-    tfTaken: [...S.tfTaken], tfChosen: [...S.tfChosen], tfRemain: S.tfRemain, ssLoggedIn: S.ssLoggedIn, ssRemain: S.ssRemain, ssTaken: [...S.ssTaken], log: S.log };
+    tfTaken: [...S.tfTaken], tfChosen: [...S.tfChosen], tfRemain: S.tfRemain, tfFishClosed: S.tfFishClosed, ssLoggedIn: S.ssLoggedIn, ssRemain: S.ssRemain, ssTaken: [...S.ssTaken], log: S.log };
   if (q.get('json') === '1') return { json: state };
   return page('연습용 사이트 관리', `<h2>연습용 사이트 관리</h2><pre>${JSON.stringify(state, null, 2)}</pre>
-    <p>바꾸기 예: <code>/__admin?open=60</code> (60초 뒤 오픈), <code>?tfTaken=3,9</code>, <code>?tfRemain=2</code>, <code>?ssRemain=12</code>, <code>?ssLoggedIn=0</code>, <code>?slow=8000</code>, <code>?broken=1</code>, <code>?block=1</code>, <code>?dayFail=1</code>, <code>?hits=0</code> (요청 수 초기화), <code>?reset=1</code>, <code>?json=1</code></p>
+    <p>바꾸기 예: <code>/__admin?open=60</code> (60초 뒤 오픈), <code>?tfTaken=3,9</code>, <code>?tfRemain=2</code>, <code>?tfFishClosed=1</code>, <code>?ssRemain=12</code>, <code>?ssLoggedIn=0</code>, <code>?slow=8000</code>, <code>?broken=1</code>, <code>?block=1</code>, <code>?dayFail=1</code>, <code>?hits=0</code> (요청 수 초기화), <code>?reset=1</code>, <code>?json=1</code></p>
     <ul><li><a href="/index.php?mid=bk">더피싱 예약 목록</a></li><li><a href="/ship/schedule_fleet">선상24 일정 페이지</a></li></ul>`);
 }
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.26.1112-175132
+// @version      2.5.27.1112-175321
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -727,6 +727,8 @@
   function fishByKeyword(items, textOf) {
     return items.find((it) => CONFIG.fishKeywords.some((k) => textOf(it).includes(k))) || null;
   }
+  // 낚시종류가 모두 마감(선택 불가)일 때는 진행하지 않고 안내
+  const NO_FISH_MSG = '선택할 수 있는 낚시종류가 없습니다(모두 마감). 화면을 확인하세요.';
 
   // 이 예약 화면에서 한 번에 예약할 수 있는 최대 인원. 사이트의 + 버튼이 확인하는 세 값 중 가장 작은 값
   // (남은 승선 인원, 1인 최대 예약 인원, 가격 옵션의 최대 인원. 뒤의 둘은 0이면 제한 없음)
@@ -752,7 +754,9 @@
 
     // 선택출항 예약: 낚시종류 고르기 (가격·최대 인원이 종류에 따라 달라질 수 있어 인원보다 먼저)
     // 키워드가 들어간 맨 위 종류, 없으면 화면에 선택된 종류 그대로
-    const fishRadios = [...document.querySelectorAll('input[name="default_schedule_no"]')].filter((r) => !r.disabled);
+    const allFish = [...document.querySelectorAll('input[name="default_schedule_no"]')];
+    const fishRadios = allFish.filter((r) => !r.disabled);
+    if (allFish.length && !fishRadios.length) { status(NO_FISH_MSG); toast(NO_FISH_MSG); return; }
     const fishText = (r) => { const it = r.parentElement?.parentElement; return ((it?.querySelector('.fish') || it)?.textContent || '').replace(/\s+/g, ' ').trim(); };
     if (fishRadios.length && CONFIG.fishKeywords.length) {
       const fish = fishByKeyword(fishRadios, fishText);

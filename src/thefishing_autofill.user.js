@@ -40,7 +40,9 @@
   };
   const FIELDS = [
     { key: 'date', w: 1, label: '출조일', type: 'date', help: '목록 페이지에서 시작할 때 사용' },
-    { key: 'shipName', w: 2, label: '배 이름', type: 'list', help: '이름 일부, 쉼표로 여러 개 (예: 만석호)' },
+    { key: 'shipName', w: 2, label: '배 이름', type: 'list', help: '이 예약 목록에 나오는 배 중에서 선택',
+      // 예약 목록의 배 이름 (뒤의 "(20)" 같은 숫자는 바뀌므로 뺌)
+      choices: () => SHIPS.map((s) => s.name.replace(/\(\d+\)$/, '')) },
     { key: 'fishKeywords', w: 1, perShip: true, label: '낚시종류 키워드', type: 'list', help: '쉼표로 구분. 하나라도 들어간 맨 위 종류(비우면 첫 번째). 배마다 따로 저장' },
     { key: 'people', w: 1, label: '예약 인원', type: 'number', min: 1, max: 30 },
     { key: 'name', w: 1, label: '예약자명', type: 'text', required: true },
@@ -512,7 +514,6 @@
     return [...ships].map(([id, name]) => ({ id, name }));
   }
   const SHIPS = isList ? shipLinks() : [];
-  if (SHIPS.length) FIELDS.find((f) => f.key === 'shipName').help += ` 이 사이트의 배: ${SHIPS.map((s) => s.name).join(', ')}`;
 
   function startOnList() {
     const names = [].concat(CONFIG.shipName || []).filter(Boolean);

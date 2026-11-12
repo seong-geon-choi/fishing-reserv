@@ -35,7 +35,9 @@
   };
   const FIELDS = [
     { key: 'date', w: 1, label: '출조일', type: 'date', required: true },
-    { key: 'shipName', w: 2, label: '배 이름', type: 'list', help: '이름 일부, 쉼표로 여러 개 (예: 가가호). 여러 배가 나오는 사이트는 꼭 입력' },
+    { key: 'shipName', w: 2, label: '배 이름', type: 'list', help: '이 일정 페이지에 나오는 배 중에서 선택. 배가 하나뿐인 사이트는 비워도 됨',
+      // 일정 페이지 각 줄의 배 이름
+      choices: () => [...new Set([...document.querySelectorAll('td.ship_info .title')].map((e) => e.textContent.trim()).filter(Boolean))] },
     { key: 'fishKeywords', w: 1, label: '낚시종류 키워드', type: 'list', help: '선택출항 예약만. 쉼표로 구분, 하나라도 들어간 맨 위 종류(없으면 화면 선택 그대로)' },
     { key: 'people', w: 1, label: '예약 인원', type: 'number', min: 1, max: 30 },
     { key: 'name', w: 1, label: '예약자명', type: 'text', help: '비우면 화면 값 사용' },

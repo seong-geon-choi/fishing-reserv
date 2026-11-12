@@ -22,10 +22,17 @@
       grid.insertAdjacentHTML('beforeend', `<label class="c span${f.w || 4} ${f.danger ? 'danger' : ''}"><input type="checkbox" id="${id}" ${c[f.key] ? 'checked' : ''}><span>${f.label}${f.danger ? `<span class="help danger">${f.danger}</span>` : help}</span></label>`);
       return;
     }
-    const input = f.type === 'groups' ? `<textarea id="${id}"></textarea>`
+    const input = f.choices ? `<select id="${id}"></select>` // 드롭다운 (예: 이 사이트의 배 이름 목록)
+      : f.type === 'groups' ? `<textarea id="${id}"></textarea>`
       : `<input id="${id}" type="${{ number: 'number', datetime: 'datetime-local', date: 'date' }[f.type] || 'text'}" ${f.type === 'datetime' ? 'step="1"' : ''} ${f.type === 'phone' ? 'inputmode="tel"' : ''}>`;
     grid.insertAdjacentHTML('beforeend', `<label class="f span${f.w || 1}"><span>${f.label}${f.required ? ' <b>*</b>' : ''}</span>${input}${help}</label>`);
-    ui.getElementById(id).value = toText(f, c[f.key]);
+    const el = ui.getElementById(id);
+    if (f.choices) {
+      // 선택지: "선택하세요" + 목록. 저장된 값이 목록에 없으면(다른 달에만 나오는 배 등) 그 값도 넣어 둠
+      const cur = toText(f, c[f.key]);
+      for (const n of ['', ...new Set([...f.choices(), cur].filter(Boolean))]) el.add(new Option(n || '선택하세요', n));
+    }
+    el.value = toText(f, c[f.key]);
   }
   // 지금은 쓰이지 않는 칸: 입력을 막고(회색) 이유를 칸 아래에 표시, 누르면 tip을 토스트로.
   // disabled는 브라우저가 클릭을 무시해 안내를 띄울 수 없으므로 읽기 전용으로 (값은 바뀌지 않은 채 저장됨)

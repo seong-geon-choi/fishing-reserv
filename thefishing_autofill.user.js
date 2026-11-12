@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.18.1111-170552
+// @version      2.8.19.1112-155053
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -40,7 +40,9 @@
   };
   const FIELDS = [
     { key: 'date', w: 1, label: '출조일', type: 'date', help: '목록 페이지에서 시작할 때 사용' },
-    { key: 'shipName', w: 2, label: '배 이름', type: 'list', help: '이름 일부, 쉼표로 여러 개 (예: 만석호)' },
+    { key: 'shipName', w: 2, label: '배 이름', type: 'list', help: '이 예약 목록에 나오는 배 중에서 선택',
+      // 예약 목록의 배 이름 (뒤의 "(20)" 같은 숫자는 바뀌므로 뺌)
+      choices: () => SHIPS.map((s) => s.name.replace(/\(\d+\)$/, '')) },
     { key: 'fishKeywords', w: 1, perShip: true, label: '낚시종류 키워드', type: 'list', help: '쉼표로 구분. 하나라도 들어간 맨 위 종류(비우면 첫 번째). 배마다 따로 저장' },
     { key: 'people', w: 1, label: '예약 인원', type: 'number', min: 1, max: 30 },
     { key: 'name', w: 1, label: '예약자명', type: 'text', required: true },
@@ -129,7 +131,7 @@
       label.f { display:block; margin:0 0 12px; }
       label.f > span { display:block; font-weight:700; margin-bottom:4px; }
       label.f > span b { color:#c92a2a; }
-      input[type=text], input[type=number], input[type=date], input[type=datetime-local], textarea { width:100%; font-size:15px; padding:8px; border:1px solid #9aa5b1; border-radius:6px; background:#fff; color:#1f2933; }
+      input[type=text], input[type=number], input[type=date], input[type=datetime-local], textarea, select { width:100%; font-size:15px; padding:8px; border:1px solid #9aa5b1; border-radius:6px; background:#fff; color:#1f2933; }
       textarea { min-height:88px; font-family:Consolas, monospace; }
       label.c { display:flex; gap:8px; align-items:flex-start; margin:0 0 12px; font-weight:700; }
       label.c input { width:20px; height:20px; margin:0; flex:none; }
@@ -174,7 +176,7 @@
       @media (max-width: 640px) { .grid4 { grid-template-columns:repeat(2, minmax(0, 1fr)); } .span3 { grid-column:1 / -1; } }
       label.f { margin:0; min-width:0; }
       label.f > span { font-size:13px; margin-bottom:2px; }
-      input[type=text], input[type=number], input[type=date], input[type=datetime-local], textarea { font-size:14px; padding:6px 8px; }
+      input[type=text], input[type=number], input[type=date], input[type=datetime-local], textarea, select { font-size:14px; padding:6px 8px; }
       textarea { min-height:64px; }
       label.c { margin:0; font-size:13px; align-items:center; }
       label.c input { width:18px; height:18px; }
@@ -323,10 +325,17 @@
       grid.insertAdjacentHTML('beforeend', `<label class="c span${f.w || 4} ${f.danger ? 'danger' : ''}"><input type="checkbox" id="${id}" ${c[f.key] ? 'checked' : ''}><span>${f.label}${f.danger ? `<span class="help danger">${f.danger}</span>` : help}</span></label>`);
       return;
     }
-    const input = f.type === 'groups' ? `<textarea id="${id}"></textarea>`
+    const input = f.choices ? `<select id="${id}"></select>` // 드롭다운 (예: 이 사이트의 배 이름 목록)
+      : f.type === 'groups' ? `<textarea id="${id}"></textarea>`
       : `<input id="${id}" type="${{ number: 'number', datetime: 'datetime-local', date: 'date' }[f.type] || 'text'}" ${f.type === 'datetime' ? 'step="1"' : ''} ${f.type === 'phone' ? 'inputmode="tel"' : ''}>`;
     grid.insertAdjacentHTML('beforeend', `<label class="f span${f.w || 1}"><span>${f.label}${f.required ? ' <b>*</b>' : ''}</span>${input}${help}</label>`);
-    ui.getElementById(id).value = toText(f, c[f.key]);
+    const el = ui.getElementById(id);
+    if (f.choices) {
+      // 선택지: "선택하세요" + 목록. 저장된 값이 목록에 없으면(다른 달에만 나오는 배 등) 그 값도 넣어 둠
+      const cur = toText(f, c[f.key]);
+      for (const n of ['', ...new Set([...f.choices(), cur].filter(Boolean))]) el.add(new Option(n || '선택하세요', n));
+    }
+    el.value = toText(f, c[f.key]);
   }
   // 지금은 쓰이지 않는 칸: 입력을 막고(회색) 이유를 칸 아래에 표시, 누르면 tip을 토스트로.
   // disabled는 브라우저가 클릭을 무시해 안내를 띄울 수 없으므로 읽기 전용으로 (값은 바뀌지 않은 채 저장됨)
@@ -749,7 +758,6 @@
     return [...ships].map(([id, name]) => ({ id, name }));
   }
   const SHIPS = isList ? shipLinks() : [];
-  if (SHIPS.length) FIELDS.find((f) => f.key === 'shipName').help += ` 이 사이트의 배: ${SHIPS.map((s) => s.name).join(', ')}`;
 
   function startOnList() {
     const names = [].concat(CONFIG.shipName || []).filter(Boolean);

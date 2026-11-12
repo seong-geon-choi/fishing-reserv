@@ -594,6 +594,13 @@
     const dead = () => stopped || my !== runId;
     stopBtn.hidden = false;
     const openLabel = CONFIG.openAt ? ` 오픈 ${fmtTime(CONFIG.openAt)}` : '';
+    if (!CONFIG.openAt) {
+      // 오픈 시각이 없으면 계속 확인하지 않음: 지금 열린 이 화면이 확인 결과(아직 안 열림)이므로 추가 요청 없이 안내하고 멈춤
+      stopped = true;
+      stopBtn.hidden = true;
+      showStep1Start('아직 예약이 오픈되지 않았습니다. 설정에서 "예약 오픈 시각"을 입력하면 그 시각에 맞춰 자동으로 확인합니다.');
+      return;
+    }
     if (!(await countdown(`${date}${openLabel}`, dead))) return;
     const radios = await pollOverlap(async (signal) => {
       const html = await fetchPage(location.href, { signal }).then((r) => r.text());

@@ -73,15 +73,34 @@
   }
 
   // 화면이 깨졌을 때 잠시 뒤 다시 열기 (beforeReload: 다시 열기 직전에 할 일)
+  // 새로고침은 그림·CSS까지 통째로 다시 받으므로, 혼잡할 때 몰리지 않게 3→6→12→24→48초로 늘리고 최대 5번까지만.
+  // 횟수는 이 탭에서 같은 화면 기준으로 세고, 마지막 시도 뒤 2분이 지나면 처음부터
+  const RELOAD_KEY = 'fishingReserv.reloads';
+  const RELOAD_MAX = 5;
   function reloadSoon(why, beforeReload) {
-    let sec = 3;
+    const key = location.pathname + location.search;
+    let r = null;
+    try { r = JSON.parse(sessionStorage.getItem(RELOAD_KEY) || 'null'); } catch (e) { /* 무시 */ }
+    const n = r && r.key === key && Date.now() - r.t < 2 * 60 * 1000 ? r.n : 0;
+    if (n >= RELOAD_MAX) {
+      try { sessionStorage.removeItem(RELOAD_KEY); } catch (e) { /* 무시 */ }
+      stopBtn.hidden = true;
+      status(`${why} ${RELOAD_MAX}번 다시 열어도 안 되어 멈췄습니다. 잠시 뒤 직접 새로고침(F5)하세요.`);
+      return;
+    }
+    let sec = 3 * 2 ** n;
     stopped = false;
     stopBtn.hidden = false;
     const tick = () => {
       if (stopped) return;
       if (asking) { setTimeout(tick, 200); return; } // 긴급 정지 확인창이 떠 있으면 다시 열지 않고 기다림
-      status(`${why} ${sec}초 뒤 다시 엽니다… (그만하려면 중지)`);
-      if (sec-- <= 0) { beforeReload?.(); location.reload(); return; }
+      status(`${why} ${sec}초 뒤 다시 엽니다 (${n + 1}/${RELOAD_MAX})… (그만하려면 중지)`);
+      if (sec-- <= 0) {
+        try { sessionStorage.setItem(RELOAD_KEY, JSON.stringify({ key, n: n + 1, t: Date.now() })); } catch (e) { /* 무시 */ }
+        beforeReload?.();
+        location.reload();
+        return;
+      }
       setTimeout(tick, 1000);
     };
     tick();

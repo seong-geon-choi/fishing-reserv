@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.24.1112-163644
+// @version      2.5.25.1112-174739
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -312,6 +312,7 @@
   }
   function openPanel(note) {
     const c = loadConfig();
+    dayUrlPromise = null; // 하루치 일정은 설정 창을 열 때마다 새로 (한 번만)
     const grid = panelTop(note);
     for (const f of FIELDS) {
       addField(grid, f, c);
@@ -341,13 +342,22 @@
   async function reserveKind() {
     if (/^\/mypage\/reservation_default_ready\//.test(location.pathname)) return 'default';
     if (/^\/mypage\/reservation_ready\//.test(location.pathname)) return 'normal';
-    const cfg = loadConfig();
-    if (!cfg.date) return null;
-    const ymOf = cfg.date.slice(0, 7).replace('-', '');
-    const doc = location.pathname.endsWith(ymOf) ? document
-      : new DOMParser().parseFromString(await fetchPage(`/ship/schedule_fleet/${ymOf}`).then((r) => r.text()), 'text/html');
-    const url = findSchedule(doc);
+    const url = await dayReserveUrl();
     return !url ? null : url.includes('reservation_default_ready') ? 'default' : 'normal';
+  }
+  // 설정한 날짜의 하루치 일정(한 달치보다 15~20배 가벼움)에서 그 배의 예약 화면 주소.
+  // 설정 창을 한 번 여는 동안 한 번만 받아 자리배치도·낚시종류 판단이 같이 씀
+  let dayUrlPromise = null;
+  function dayReserveUrl() {
+    if (!dayUrlPromise) {
+      dayUrlPromise = (async () => {
+        const cfg = loadConfig();
+        if (!cfg.date) return null;
+        const r = await fetchPage(`/ship/schedule_fleet/${cfg.date}/0/simple_day1`);
+        return r.ok ? findInDay(new DOMParser().parseFromString(`<table>${await r.text()}</table>`, 'text/html')) : null;
+      })().catch(() => null);
+    }
+    return dayUrlPromise;
   }
   const SEATIMG_KEY = 'fishingReserv.ss24SeatImg';
   async function findSeatImg() {
@@ -361,9 +371,8 @@
     if (key in cache) return cache[key];
     const pickBtn = (doc) => [...doc.querySelectorAll('button.btn_user_reservation[data-schedule_no]')].find((b) =>
       b.dataset.ship_status_code !== 'END_READY' && (!names.length || names.some((n) => (b.closest('td.ship_info')?.textContent || '').includes(n))));
-    let btn = pickBtn(document);
-    if (!btn && cfg.date) btn = pickBtn(new DOMParser().parseFromString(await fetchPage(`/ship/schedule_fleet/${cfg.date.slice(0, 7).replace('-', '')}`).then((r) => r.text()), 'text/html'));
-    const url = btn && reserveUrl(btn);
+    const btn = pickBtn(document); // 지금 보고 있는 일정 페이지에 그 배가 있으면 요청 없이
+    const url = btn ? reserveUrl(btn) : await dayReserveUrl();
     if (!url) return null; // 예약 화면을 못 찾음 (기억하지 않음)
     const doc = new DOMParser().parseFromString(await fetchPage(url).then((r) => r.text()), 'text/html');
     const src = doc.querySelector('.arrange_seating_wrap img')?.getAttribute('src') || '';
@@ -542,15 +551,34 @@
   }
 
   // 화면이 깨졌을 때 잠시 뒤 다시 열기 (beforeReload: 다시 열기 직전에 할 일)
+  // 새로고침은 그림·CSS까지 통째로 다시 받으므로, 혼잡할 때 몰리지 않게 3→6→12→24→48초로 늘리고 최대 5번까지만.
+  // 횟수는 이 탭에서 같은 화면 기준으로 세고, 마지막 시도 뒤 2분이 지나면 처음부터
+  const RELOAD_KEY = 'fishingReserv.reloads';
+  const RELOAD_MAX = 5;
   function reloadSoon(why, beforeReload) {
-    let sec = 3;
+    const key = location.pathname + location.search;
+    let r = null;
+    try { r = JSON.parse(sessionStorage.getItem(RELOAD_KEY) || 'null'); } catch (e) { /* 무시 */ }
+    const n = r && r.key === key && Date.now() - r.t < 2 * 60 * 1000 ? r.n : 0;
+    if (n >= RELOAD_MAX) {
+      try { sessionStorage.removeItem(RELOAD_KEY); } catch (e) { /* 무시 */ }
+      stopBtn.hidden = true;
+      status(`${why} ${RELOAD_MAX}번 다시 열어도 안 되어 멈췄습니다. 잠시 뒤 직접 새로고침(F5)하세요.`);
+      return;
+    }
+    let sec = 3 * 2 ** n;
     stopped = false;
     stopBtn.hidden = false;
     const tick = () => {
       if (stopped) return;
       if (asking) { setTimeout(tick, 200); return; } // 긴급 정지 확인창이 떠 있으면 다시 열지 않고 기다림
-      status(`${why} ${sec}초 뒤 다시 엽니다… (그만하려면 중지)`);
-      if (sec-- <= 0) { beforeReload?.(); location.reload(); return; }
+      status(`${why} ${sec}초 뒤 다시 엽니다 (${n + 1}/${RELOAD_MAX})… (그만하려면 중지)`);
+      if (sec-- <= 0) {
+        try { sessionStorage.setItem(RELOAD_KEY, JSON.stringify({ key, n: n + 1, t: Date.now() })); } catch (e) { /* 무시 */ }
+        beforeReload?.();
+        location.reload();
+        return;
+      }
       setTimeout(tick, 1000);
     };
     tick();
@@ -633,15 +661,37 @@
     });
     if (!ok) return;
     if (await loginLost()) return; // 확인 요청을 시작하기 직전에 한 번 더
-    const url = await pollOverlap(async (signal) => {
-      // 하루치 일정(사이트가 예약 완료 후 쓰는 요청)만 받아 확인: 한 달치 페이지보다 15~20배 작음
-      const r = await fetchPage(`/ship/schedule_fleet/${CONFIG.date}/0/simple_day1`, { signal });
-      if (r.ok) return findInDay(new DOMParser().parseFromString(`<table>${await r.text()}</table>`, 'text/html'));
-      // 하루치 요청이 안 되면 한 달치 일정 페이지로 확인
+    // 하루치 일정(사이트가 예약 완료 후 쓰는 요청)만 받아 확인: 한 달치 페이지보다 15~20배 작음.
+    // 하루치가 안 되면 기본은 하루치를 다시 시도하고, 연속 10번 실패할 때만 무거운 한 달치로 한 번 확인
+    let dayFails = 0;
+    const probe = async (signal) => {
+      let r = null;
+      try { r = await fetchPage(`/ship/schedule_fleet/${CONFIG.date}/0/simple_day1`, { signal }); } catch (e) { if (blocked) throw e; }
+      if (r && r.ok) { dayFails = 0; return findInDay(new DOMParser().parseFromString(`<table>${await r.text()}</table>`, 'text/html')); }
+      if (++dayFails % 10) return null;
       const html = await fetchPage(`/ship/schedule_fleet/${ym}`, { signal }).then((x) => x.text());
       return findSchedule(new DOMParser().parseFromString(html, 'text/html'));
-    }, dead, label);
+    };
+    if (!CONFIG.openAt) {
+      // 오픈 시각이 없으면 한 번만 확인: 열려 있으면 바로 진행, 아니면 안내하고 멈춤 (계속 확인하지 않음)
+      const url = await probe().catch(() => null);
+      if (!url) { notOpenYet(); return; }
+      return goReserve(url);
+    }
+    const url = await pollOverlap(probe, dead, label);
     if (!url) return;
+    return goReserve(url);
+  }
+  // 오픈 시각 없이 시작했는데 아직 안 열림
+  function notOpenYet() {
+    stopped = true;
+    stopBtn.hidden = true;
+    status('아직 예약이 오픈되지 않았습니다. 설정에서 "예약 오픈 시각"을 입력하면 그 시각에 맞춰 자동으로 확인합니다.');
+    const btn = ui.querySelector('.start');
+    btn.hidden = false;
+    btn.onclick = () => { btn.hidden = true; panel.hidden = true; waitOnSchedule(); };
+  }
+  async function goReserve(url) {
     if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
     stopBtn.hidden = true;
     status(`예약 오픈 감지! 예약 화면으로 이동합니다 (${url.split('/').slice(-2).join('/')})`);

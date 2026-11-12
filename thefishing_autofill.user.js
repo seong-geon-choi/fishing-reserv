@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.25.1112-173601
+// @version      2.8.26.1112-174739
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -932,15 +932,34 @@
   }
 
   // 화면이 깨졌을 때 잠시 뒤 다시 열기 (beforeReload: 다시 열기 직전에 할 일)
+  // 새로고침은 그림·CSS까지 통째로 다시 받으므로, 혼잡할 때 몰리지 않게 3→6→12→24→48초로 늘리고 최대 5번까지만.
+  // 횟수는 이 탭에서 같은 화면 기준으로 세고, 마지막 시도 뒤 2분이 지나면 처음부터
+  const RELOAD_KEY = 'fishingReserv.reloads';
+  const RELOAD_MAX = 5;
   function reloadSoon(why, beforeReload) {
-    let sec = 3;
+    const key = location.pathname + location.search;
+    let r = null;
+    try { r = JSON.parse(sessionStorage.getItem(RELOAD_KEY) || 'null'); } catch (e) { /* 무시 */ }
+    const n = r && r.key === key && Date.now() - r.t < 2 * 60 * 1000 ? r.n : 0;
+    if (n >= RELOAD_MAX) {
+      try { sessionStorage.removeItem(RELOAD_KEY); } catch (e) { /* 무시 */ }
+      stopBtn.hidden = true;
+      status(`${why} ${RELOAD_MAX}번 다시 열어도 안 되어 멈췄습니다. 잠시 뒤 직접 새로고침(F5)하세요.`);
+      return;
+    }
+    let sec = 3 * 2 ** n;
     stopped = false;
     stopBtn.hidden = false;
     const tick = () => {
       if (stopped) return;
       if (asking) { setTimeout(tick, 200); return; } // 긴급 정지 확인창이 떠 있으면 다시 열지 않고 기다림
-      status(`${why} ${sec}초 뒤 다시 엽니다… (그만하려면 중지)`);
-      if (sec-- <= 0) { beforeReload?.(); location.reload(); return; }
+      status(`${why} ${sec}초 뒤 다시 엽니다 (${n + 1}/${RELOAD_MAX})… (그만하려면 중지)`);
+      if (sec-- <= 0) {
+        try { sessionStorage.setItem(RELOAD_KEY, JSON.stringify({ key, n: n + 1, t: Date.now() })); } catch (e) { /* 무시 */ }
+        beforeReload?.();
+        location.reload();
+        return;
+      }
       setTimeout(tick, 1000);
     };
     tick();
@@ -999,6 +1018,13 @@
     const dead = () => stopped || my !== runId;
     stopBtn.hidden = false;
     const openLabel = CONFIG.openAt ? ` 오픈 ${fmtTime(CONFIG.openAt)}` : '';
+    if (!CONFIG.openAt) {
+      // 오픈 시각이 없으면 계속 확인하지 않음: 지금 열린 이 화면이 확인 결과(아직 안 열림)이므로 추가 요청 없이 안내하고 멈춤
+      stopped = true;
+      stopBtn.hidden = true;
+      showStep1Start('아직 예약이 오픈되지 않았습니다. 설정에서 "예약 오픈 시각"을 입력하면 그 시각에 맞춰 자동으로 확인합니다.');
+      return;
+    }
     if (!(await countdown(`${date}${openLabel}`, dead))) return;
     const radios = await pollOverlap(async (signal) => {
       const html = await fetchPage(location.href, { signal }).then((r) => r.text());

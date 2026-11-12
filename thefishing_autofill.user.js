@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.19.1112-155053
+// @version      2.8.20.1112-155530
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -334,6 +334,18 @@
       // 선택지: "선택하세요" + 목록. 저장된 값이 목록에 없으면(다른 달에만 나오는 배 등) 그 값도 넣어 둠
       const cur = toText(f, c[f.key]);
       for (const n of ['', ...new Set([...f.choices(), cur].filter(Boolean))]) el.add(new Option(n || '선택하세요', n));
+      // 맨 아래 "직접 입력…": 고르면 그 자리를 글자 입력칸으로 바꿈 (목록에 없는 배, 이름 일부만 적기)
+      const CUSTOM = '__직접입력__';
+      el.add(new Option('직접 입력…', CUSTOM));
+      el.addEventListener('change', () => {
+        if (el.value !== CUSTOM) return;
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.id = id;
+        inp.placeholder = '배 이름 (일부만 적어도 됨)';
+        el.replaceWith(inp);
+        inp.focus();
+      });
     }
     el.value = toText(f, c[f.key]);
   }

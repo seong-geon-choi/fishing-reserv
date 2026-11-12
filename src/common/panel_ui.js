@@ -31,6 +31,18 @@
       // 선택지: "선택하세요" + 목록. 저장된 값이 목록에 없으면(다른 달에만 나오는 배 등) 그 값도 넣어 둠
       const cur = toText(f, c[f.key]);
       for (const n of ['', ...new Set([...f.choices(), cur].filter(Boolean))]) el.add(new Option(n || '선택하세요', n));
+      // 맨 아래 "직접 입력…": 고르면 그 자리를 글자 입력칸으로 바꿈 (목록에 없는 배, 이름 일부만 적기)
+      const CUSTOM = '__직접입력__';
+      el.add(new Option('직접 입력…', CUSTOM));
+      el.addEventListener('change', () => {
+        if (el.value !== CUSTOM) return;
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.id = id;
+        inp.placeholder = '배 이름 (일부만 적어도 됨)';
+        el.replaceWith(inp);
+        inp.focus();
+      });
     }
     el.value = toText(f, c[f.key]);
   }

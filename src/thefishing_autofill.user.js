@@ -47,7 +47,7 @@
     date: '', shipName: [],
     name: '', depositor: '', tel: ['', '', ''],
     people: 2, fishKeywords: [], seatGroups: [], fallbackAnySeat: true, partialSeats: false, minPeople: 1,
-    openAt: '', startBeforeSec: 30, pollMs: 700, autoSubmit: false,
+    openAt: '', startBeforeSec: 30, pollMs: 1000, autoSubmit: false,
     perShip: {}, // 배 번호(PA_N_UID)별 설정: { '3570': { fishKeywords, seatGroups, fallbackAnySeat } }
   };
   const FIELDS = [
@@ -65,7 +65,7 @@
     { key: 'fallbackAnySeat', w: 4, perShip: true, label: '그룹으로 인원을 못 채우면 남은 좌석으로 채우기', type: 'check' },
     { key: 'openAt', w: 2, label: '예약 오픈 시각', type: 'datetime', help: '비우면 시작하자마자 확인' },
     { key: 'startBeforeSec', w: 1, label: '몇 초 전부터 확인', type: 'number', min: 5, max: 600 },
-    { key: 'pollMs', w: 1, label: '확인 간격(ms)', type: 'number', min: 300, max: 10000, help: '700~1000 권장' },
+    { key: 'pollMs', w: 1, label: '확인 간격(ms)', type: 'number', min: 500, max: 10000, help: '1000 이상 권장' },
     { key: 'autoSubmit', w: 4, label: '"예약 신청하기"·확인창·예약확인 단계의 "예약 신청하기"까지 자동으로 누르기 (최종 예약)', type: 'check', danger: '켜면 확인 없이 실제로 예약됩니다. 연습할 때는 끄세요.' },
   ];
   // =====================================================
@@ -160,6 +160,7 @@
       </div>
     </div>`;
 //@@include ui_after.js
+//@@include net.js
 
 //@@include panel_ui.js
   function openPanel(note) {
@@ -264,42 +265,44 @@
   const parseHtml = (h) => new DOMParser().parseFromString(h, 'text/html');
   const radiosIn = (doc) => [...doc.querySelectorAll('input[type=radio][name=PS_N_UID]')];
 
-  // 예약 가능한 날짜 찾기: 오늘부터 하루씩(6개씩 묶어) 확인, 최대 60일 · 8개까지
-  // 시뮬레이터로 넘길 배치: 가장 가까운 예약 가능 날짜 하나의 좌석 배치·예약 현황 (한 번 읽으면 기억)
-  const layoutCache = {};
+  // 시뮬레이터로 넘길 배치: 가장 가까운 예약 가능 날짜 하나의 좌석 배치·예약 현황.
+  // 사이트에 다시 묻지 않게 배별로 30분 동안 이 브라우저에 기억
+  const LAYOUT_KEY = 'fishingReserv.layout';
   async function siteLayout(shipId) {
-    if (layoutCache[shipId]) return layoutCache[shipId];
+    let cache = {};
+    try { cache = JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}'); } catch (e) { /* 무시 */ }
+    if (cache[shipId] && Date.now() - cache[shipId].t < 30 * 60 * 1000) return cache[shipId];
     const dates = await findOpenDates(shipId, () => {}, 1, () => true);
     if (!dates.length) return null;
-    layoutCache[shipId] = { ds: dates[0].ds, seats: await loadSeats(dates[0].url) };
-    return layoutCache[shipId];
+    cache[shipId] = { ds: dates[0].ds, seats: await loadSeats(dates[0].url), t: Date.now() };
+    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(cache)); } catch (e) { /* 무시 */ }
+    return cache[shipId];
   }
 
+  // 예약 가능한 날짜 찾기: 오늘부터 하루씩 차례로 확인 (사이트에 부담 주지 않게 한 번에 하나, 0.4초 간격), 최대 60일 · want개까지
   // want: 찾을 날짜 수, alive: 계속 찾을지 (좌석 고르기 창을 닫으면 멈춤)
-  async function findOpenDates(shipId, onFound, want = 8, alive = () => !!pick) {
+  async function findOpenDates(shipId, onFound, want = 4, alive = () => !!pick) {
     const found = [];
     const today = new Date();
-    for (let i = 0; i < 60 && found.length < want && alive(); i += 6) {
-      const batch = [];
-      for (let j = i; j < i + 6 && j < 60; j++) {
-        const d = new Date(today); d.setDate(today.getDate() + j);
-        const ds = ymd(d);
-        batch.push(fetch(stepUrl(`date=${ds}&PA_N_UID=${shipId}`), { cache: 'no-store' }).then((r) => r.text()).then((h) => {
-          const r0 = radiosIn(parseHtml(h)).find((r) => !r.disabled);
-          if (!r0) return null;
-          const m = (r0.getAttribute('onclick') || '').match(/ps_url\('(\d+)',\s*'(\d+)',\s*'(\d*)',\s*'(\d+)'\)/);
-          const [dd, p, ph, ps] = m ? m.slice(1) : [ds, shipId, '0', r0.value];
-          return { ds, url: stepUrl(`date=${dd}&PA_N_UID=${p}&PH_N_UID=${ph || 0}&PS_N_UID=${ps}`) };
-        }).catch(() => null));
-      }
-      for (const r of await Promise.all(batch)) if (r && found.length < want) { found.push(r); onFound(found); }
+    for (let j = 0; j < 60 && found.length < want && alive() && !blocked; j++) {
+      if (j) await sleep(400);
+      const d = new Date(today); d.setDate(today.getDate() + j);
+      const ds = ymd(d);
+      let h;
+      try { h = await fetchPage(stepUrl(`date=${ds}&PA_N_UID=${shipId}`)).then((r) => r.text()); } catch (e) { continue; }
+      const r0 = radiosIn(parseHtml(h)).find((r) => !r.disabled);
+      if (!r0) continue;
+      const m = (r0.getAttribute('onclick') || '').match(/ps_url\('(\d+)',\s*'(\d+)',\s*'(\d*)',\s*'(\d+)'\)/);
+      const [dd, p, ph, ps] = m ? m.slice(1) : [ds, shipId, '0', r0.value];
+      found.push({ ds, url: stepUrl(`date=${dd}&PA_N_UID=${p}&PH_N_UID=${ph || 0}&PS_N_UID=${ps}`) });
+      onFound(found);
     }
     return found;
   }
 
   // 그 날 좌석 배치 읽기: 칸 번호(res_seatNN) + 좌석 번호 + 이미 예약됐는지
   async function loadSeats(url) {
-    const doc = parseHtml(await fetch(url, { cache: 'no-store' }).then((r) => r.text()));
+    const doc = parseHtml(await fetchPage(url).then((r) => r.text()));
     const seats = [];
     for (const el of doc.querySelectorAll('.res_ship_seat [class*="res_seat"]')) {
       const slot = +((el.className.match(/res_seat(\d+)/) || [])[1]);
@@ -593,7 +596,7 @@
     const openLabel = CONFIG.openAt ? ` 오픈 ${fmtTime(CONFIG.openAt)}` : '';
     if (!(await countdown(`${date}${openLabel}`, dead))) return;
     const radios = await pollOverlap(async (signal) => {
-      const html = await fetch(location.href, { cache: 'no-store', signal }).then((r) => r.text());
+      const html = await fetchPage(location.href, { signal }).then((r) => r.text());
       const found = fishRadios(new DOMParser().parseFromString(html, 'text/html'));
       return found.length ? found : null;
     }, dead, `${date}${openLabel}`);

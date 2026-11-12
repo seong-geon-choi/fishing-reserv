@@ -61,7 +61,7 @@
     ask.querySelector(".cut").onclick = () => { for (const r of overdue()) r.ctl.abort(); ask.hidden = true; };
     while (!found && !dead()) {
       const since = Date.now() - lastSent;
-      if ((reqs.size === 0 && since >= CONFIG.pollMs) || (reqs.size > 0 && reqs.size < MAX_INFLIGHT && since >= STAGGER_MS)) fire();
+      if ((reqs.size === 0 && since >= Math.max(500, CONFIG.pollMs)) || (reqs.size > 0 && reqs.size < MAX_INFLIGHT && since >= STAGGER_MS)) fire();
       const late = overdue().length;
       ask.hidden = !late;
       status(`${label} 오픈 대기 중… (${sent}회 확인)${reqs.size > 1 ? ` · 사이트 응답 지연, 응답 대기 ${reqs.size}개` : ""}${late ? ` · ${late}개 요청이 1분 넘게 응답이 없습니다. 더 기다릴까요?` : ""}`);

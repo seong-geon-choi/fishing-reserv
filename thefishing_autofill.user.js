@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.22.1112-161432
+// @version      2.8.23.1112-163644
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -47,7 +47,7 @@
     date: '', shipName: [],
     name: '', depositor: '', tel: ['', '', ''],
     people: 2, fishKeywords: [], seatGroups: [], fallbackAnySeat: true, partialSeats: false, minPeople: 1,
-    openAt: '', startBeforeSec: 30, pollMs: 700, autoSubmit: false,
+    openAt: '', startBeforeSec: 30, pollMs: 1000, autoSubmit: false,
     perShip: {}, // 배 번호(PA_N_UID)별 설정: { '3570': { fishKeywords, seatGroups, fallbackAnySeat } }
   };
   const FIELDS = [
@@ -66,7 +66,7 @@
     { key: 'fallbackAnySeat', w: 4, perShip: true, label: '그룹으로 인원을 못 채우면 남은 좌석으로 채우기', type: 'check' },
     { key: 'openAt', w: 2, label: '예약 오픈 시각', type: 'datetime', help: '비우면 시작하자마자 확인' },
     { key: 'startBeforeSec', w: 1, label: '몇 초 전부터 확인', type: 'number', min: 5, max: 600 },
-    { key: 'pollMs', w: 1, label: '확인 간격(ms)', type: 'number', min: 300, max: 10000, help: '700~1000 권장' },
+    { key: 'pollMs', w: 1, label: '확인 간격(ms)', type: 'number', min: 500, max: 10000, help: '1000 이상 권장' },
     { key: 'autoSubmit', w: 4, label: '"예약 신청하기"·확인창·예약확인 단계의 "예약 신청하기"까지 자동으로 누르기 (최종 예약)', type: 'check', danger: '켜면 확인 없이 실제로 예약됩니다. 연습할 때는 끄세요.' },
   ];
   // =====================================================
@@ -312,6 +312,27 @@
     btn.style.setProperty('outline', '4px solid red', 'important');
     btn.style.setProperty('outline-offset', '2px', 'important');
   }
+  // ---------- 사이트 요청 줄이기·차단 대응 ----------
+  // 사이트가 접근을 막으면(403 Forbidden·429 Too Many Requests) 요청을 계속 보내 차단이 길어지지 않게 스크립트를 모두 멈춤
+  const BLOCK_MSG = '사이트가 이 인터넷 주소의 접근을 막았습니다(403/429). 스크립트는 요청을 멈췄습니다. 이 사이트를 한동안(수십 분 이상) 열지 말고 기다렸다가 다시 시도하세요.';
+  const isBlockedPage = () => /^(403 Forbidden|429 Too Many Requests)$/.test(document.title.trim())
+    || /You don't have permission to access/.test(document.body?.textContent || '');
+  let blocked = false;
+  // 사이트 페이지 받기: 차단 응답이면 모든 대기·요청을 멈추고 알림
+  async function fetchPage(url, opts = {}) {
+    if (blocked) throw new Error('blocked');
+    const r = await fetch(url, { cache: 'no-store', ...opts });
+    if (r.status === 403 || r.status === 429) {
+      blocked = true;
+      stopped = true; // 대기·겹쳐 보내기·다시 열기가 이 표시를 보고 멈춤
+      ui.querySelector('.stop').hidden = true;
+      status(BLOCK_MSG);
+      throw new Error('blocked');
+    }
+    return r;
+  }
+  // 차단 화면이 열렸으면 다시 열기 등을 하지 않고 여기서 멈춤
+  if (isBlockedPage()) { status(BLOCK_MSG); return; }
 
   // 설정 창 머리 + 빈 입력 칸 격자. 버전 "2.3.1.1110-225502" (기본 버전.월일-시분초) → "버전 2.3.1 · 수정 11-10 22:55:02"
   function panelTop(note) {
@@ -518,42 +539,44 @@
   const parseHtml = (h) => new DOMParser().parseFromString(h, 'text/html');
   const radiosIn = (doc) => [...doc.querySelectorAll('input[type=radio][name=PS_N_UID]')];
 
-  // 예약 가능한 날짜 찾기: 오늘부터 하루씩(6개씩 묶어) 확인, 최대 60일 · 8개까지
-  // 시뮬레이터로 넘길 배치: 가장 가까운 예약 가능 날짜 하나의 좌석 배치·예약 현황 (한 번 읽으면 기억)
-  const layoutCache = {};
+  // 시뮬레이터로 넘길 배치: 가장 가까운 예약 가능 날짜 하나의 좌석 배치·예약 현황.
+  // 사이트에 다시 묻지 않게 배별로 30분 동안 이 브라우저에 기억
+  const LAYOUT_KEY = 'fishingReserv.layout';
   async function siteLayout(shipId) {
-    if (layoutCache[shipId]) return layoutCache[shipId];
+    let cache = {};
+    try { cache = JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}'); } catch (e) { /* 무시 */ }
+    if (cache[shipId] && Date.now() - cache[shipId].t < 30 * 60 * 1000) return cache[shipId];
     const dates = await findOpenDates(shipId, () => {}, 1, () => true);
     if (!dates.length) return null;
-    layoutCache[shipId] = { ds: dates[0].ds, seats: await loadSeats(dates[0].url) };
-    return layoutCache[shipId];
+    cache[shipId] = { ds: dates[0].ds, seats: await loadSeats(dates[0].url), t: Date.now() };
+    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(cache)); } catch (e) { /* 무시 */ }
+    return cache[shipId];
   }
 
+  // 예약 가능한 날짜 찾기: 오늘부터 하루씩 차례로 확인 (사이트에 부담 주지 않게 한 번에 하나, 0.4초 간격), 최대 60일 · want개까지
   // want: 찾을 날짜 수, alive: 계속 찾을지 (좌석 고르기 창을 닫으면 멈춤)
-  async function findOpenDates(shipId, onFound, want = 8, alive = () => !!pick) {
+  async function findOpenDates(shipId, onFound, want = 4, alive = () => !!pick) {
     const found = [];
     const today = new Date();
-    for (let i = 0; i < 60 && found.length < want && alive(); i += 6) {
-      const batch = [];
-      for (let j = i; j < i + 6 && j < 60; j++) {
-        const d = new Date(today); d.setDate(today.getDate() + j);
-        const ds = ymd(d);
-        batch.push(fetch(stepUrl(`date=${ds}&PA_N_UID=${shipId}`), { cache: 'no-store' }).then((r) => r.text()).then((h) => {
-          const r0 = radiosIn(parseHtml(h)).find((r) => !r.disabled);
-          if (!r0) return null;
-          const m = (r0.getAttribute('onclick') || '').match(/ps_url\('(\d+)',\s*'(\d+)',\s*'(\d*)',\s*'(\d+)'\)/);
-          const [dd, p, ph, ps] = m ? m.slice(1) : [ds, shipId, '0', r0.value];
-          return { ds, url: stepUrl(`date=${dd}&PA_N_UID=${p}&PH_N_UID=${ph || 0}&PS_N_UID=${ps}`) };
-        }).catch(() => null));
-      }
-      for (const r of await Promise.all(batch)) if (r && found.length < want) { found.push(r); onFound(found); }
+    for (let j = 0; j < 60 && found.length < want && alive() && !blocked; j++) {
+      if (j) await sleep(400);
+      const d = new Date(today); d.setDate(today.getDate() + j);
+      const ds = ymd(d);
+      let h;
+      try { h = await fetchPage(stepUrl(`date=${ds}&PA_N_UID=${shipId}`)).then((r) => r.text()); } catch (e) { continue; }
+      const r0 = radiosIn(parseHtml(h)).find((r) => !r.disabled);
+      if (!r0) continue;
+      const m = (r0.getAttribute('onclick') || '').match(/ps_url\('(\d+)',\s*'(\d+)',\s*'(\d*)',\s*'(\d+)'\)/);
+      const [dd, p, ph, ps] = m ? m.slice(1) : [ds, shipId, '0', r0.value];
+      found.push({ ds, url: stepUrl(`date=${dd}&PA_N_UID=${p}&PH_N_UID=${ph || 0}&PS_N_UID=${ps}`) });
+      onFound(found);
     }
     return found;
   }
 
   // 그 날 좌석 배치 읽기: 칸 번호(res_seatNN) + 좌석 번호 + 이미 예약됐는지
   async function loadSeats(url) {
-    const doc = parseHtml(await fetch(url, { cache: 'no-store' }).then((r) => r.text()));
+    const doc = parseHtml(await fetchPage(url).then((r) => r.text()));
     const seats = [];
     for (const el of doc.querySelectorAll('.res_ship_seat [class*="res_seat"]')) {
       const slot = +((el.className.match(/res_seat(\d+)/) || [])[1]);
@@ -897,7 +920,7 @@
     ask.querySelector(".cut").onclick = () => { for (const r of overdue()) r.ctl.abort(); ask.hidden = true; };
     while (!found && !dead()) {
       const since = Date.now() - lastSent;
-      if ((reqs.size === 0 && since >= CONFIG.pollMs) || (reqs.size > 0 && reqs.size < MAX_INFLIGHT && since >= STAGGER_MS)) fire();
+      if ((reqs.size === 0 && since >= Math.max(500, CONFIG.pollMs)) || (reqs.size > 0 && reqs.size < MAX_INFLIGHT && since >= STAGGER_MS)) fire();
       const late = overdue().length;
       ask.hidden = !late;
       status(`${label} 오픈 대기 중… (${sent}회 확인)${reqs.size > 1 ? ` · 사이트 응답 지연, 응답 대기 ${reqs.size}개` : ""}${late ? ` · ${late}개 요청이 1분 넘게 응답이 없습니다. 더 기다릴까요?` : ""}`);
@@ -978,7 +1001,7 @@
     const openLabel = CONFIG.openAt ? ` 오픈 ${fmtTime(CONFIG.openAt)}` : '';
     if (!(await countdown(`${date}${openLabel}`, dead))) return;
     const radios = await pollOverlap(async (signal) => {
-      const html = await fetch(location.href, { cache: 'no-store', signal }).then((r) => r.text());
+      const html = await fetchPage(location.href, { signal }).then((r) => r.text());
       const found = fishRadios(new DOMParser().parseFromString(html, 'text/html'));
       return found.length ? found : null;
     }, dead, `${date}${openLabel}`);

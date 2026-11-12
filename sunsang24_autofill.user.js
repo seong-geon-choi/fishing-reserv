@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.23.1112-155609
+// @version      2.5.24.1112-163644
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -222,6 +222,27 @@
     btn.style.setProperty('outline', '4px solid red', 'important');
     btn.style.setProperty('outline-offset', '2px', 'important');
   }
+  // ---------- 사이트 요청 줄이기·차단 대응 ----------
+  // 사이트가 접근을 막으면(403 Forbidden·429 Too Many Requests) 요청을 계속 보내 차단이 길어지지 않게 스크립트를 모두 멈춤
+  const BLOCK_MSG = '사이트가 이 인터넷 주소의 접근을 막았습니다(403/429). 스크립트는 요청을 멈췄습니다. 이 사이트를 한동안(수십 분 이상) 열지 말고 기다렸다가 다시 시도하세요.';
+  const isBlockedPage = () => /^(403 Forbidden|429 Too Many Requests)$/.test(document.title.trim())
+    || /You don't have permission to access/.test(document.body?.textContent || '');
+  let blocked = false;
+  // 사이트 페이지 받기: 차단 응답이면 모든 대기·요청을 멈추고 알림
+  async function fetchPage(url, opts = {}) {
+    if (blocked) throw new Error('blocked');
+    const r = await fetch(url, { cache: 'no-store', ...opts });
+    if (r.status === 403 || r.status === 429) {
+      blocked = true;
+      stopped = true; // 대기·겹쳐 보내기·다시 열기가 이 표시를 보고 멈춤
+      ui.querySelector('.stop').hidden = true;
+      status(BLOCK_MSG);
+      throw new Error('blocked');
+    }
+    return r;
+  }
+  // 차단 화면이 열렸으면 다시 열기 등을 하지 않고 여기서 멈춤
+  if (isBlockedPage()) { status(BLOCK_MSG); return; }
 
   // 설정 창 머리 + 빈 입력 칸 격자. 버전 "2.3.1.1110-225502" (기본 버전.월일-시분초) → "버전 2.3.1 · 수정 11-10 22:55:02"
   function panelTop(note) {
@@ -324,7 +345,7 @@
     if (!cfg.date) return null;
     const ymOf = cfg.date.slice(0, 7).replace('-', '');
     const doc = location.pathname.endsWith(ymOf) ? document
-      : new DOMParser().parseFromString(await fetch(`/ship/schedule_fleet/${ymOf}`).then((r) => r.text()), 'text/html');
+      : new DOMParser().parseFromString(await fetchPage(`/ship/schedule_fleet/${ymOf}`).then((r) => r.text()), 'text/html');
     const url = findSchedule(doc);
     return !url ? null : url.includes('reservation_default_ready') ? 'default' : 'normal';
   }
@@ -341,10 +362,10 @@
     const pickBtn = (doc) => [...doc.querySelectorAll('button.btn_user_reservation[data-schedule_no]')].find((b) =>
       b.dataset.ship_status_code !== 'END_READY' && (!names.length || names.some((n) => (b.closest('td.ship_info')?.textContent || '').includes(n))));
     let btn = pickBtn(document);
-    if (!btn && cfg.date) btn = pickBtn(new DOMParser().parseFromString(await fetch(`/ship/schedule_fleet/${cfg.date.slice(0, 7).replace('-', '')}`).then((r) => r.text()), 'text/html'));
+    if (!btn && cfg.date) btn = pickBtn(new DOMParser().parseFromString(await fetchPage(`/ship/schedule_fleet/${cfg.date.slice(0, 7).replace('-', '')}`).then((r) => r.text()), 'text/html'));
     const url = btn && reserveUrl(btn);
     if (!url) return null; // 예약 화면을 못 찾음 (기억하지 않음)
-    const doc = new DOMParser().parseFromString(await fetch(url, { cache: 'no-store' }).then((r) => r.text()), 'text/html');
+    const doc = new DOMParser().parseFromString(await fetchPage(url).then((r) => r.text()), 'text/html');
     const src = doc.querySelector('.arrange_seating_wrap img')?.getAttribute('src') || '';
     cache[key] = src;
     try { localStorage.setItem(SEATIMG_KEY, JSON.stringify(cache)); } catch (e) { /* 무시 */ }
@@ -509,7 +530,7 @@
     ask.querySelector(".cut").onclick = () => { for (const r of overdue()) r.ctl.abort(); ask.hidden = true; };
     while (!found && !dead()) {
       const since = Date.now() - lastSent;
-      if ((reqs.size === 0 && since >= CONFIG.pollMs) || (reqs.size > 0 && reqs.size < MAX_INFLIGHT && since >= STAGGER_MS)) fire();
+      if ((reqs.size === 0 && since >= Math.max(500, CONFIG.pollMs)) || (reqs.size > 0 && reqs.size < MAX_INFLIGHT && since >= STAGGER_MS)) fire();
       const late = overdue().length;
       ask.hidden = !late;
       status(`${label} 오픈 대기 중… (${sent}회 확인)${reqs.size > 1 ? ` · 사이트 응답 지연, 응답 대기 ${reqs.size}개` : ""}${late ? ` · ${late}개 요청이 1분 넘게 응답이 없습니다. 더 기다릴까요?` : ""}`);
@@ -584,7 +605,7 @@
   // 로그인 확인: 마이페이지에 "로그아웃" 메뉴가 있으면 로그인 상태 (선상24는 배 사이트 주소마다 로그인이 따로)
   async function loggedIn() {
     try {
-      const html = await fetch('/mypage/my', { cache: 'no-store' }).then((r) => r.text());
+      const html = await fetchPage('/mypage/my').then((r) => r.text());
       return />\s*로그아웃\s*</.test(html);
     } catch (e) { return null; } // 확인 실패(혼잡 등)는 로그아웃으로 보지 않음
   }
@@ -614,10 +635,10 @@
     if (await loginLost()) return; // 확인 요청을 시작하기 직전에 한 번 더
     const url = await pollOverlap(async (signal) => {
       // 하루치 일정(사이트가 예약 완료 후 쓰는 요청)만 받아 확인: 한 달치 페이지보다 15~20배 작음
-      const r = await fetch(`/ship/schedule_fleet/${CONFIG.date}/0/simple_day1`, { cache: 'no-store', signal });
+      const r = await fetchPage(`/ship/schedule_fleet/${CONFIG.date}/0/simple_day1`, { signal });
       if (r.ok) return findInDay(new DOMParser().parseFromString(`<table>${await r.text()}</table>`, 'text/html'));
       // 하루치 요청이 안 되면 한 달치 일정 페이지로 확인
-      const html = await fetch(`/ship/schedule_fleet/${ym}`, { cache: 'no-store', signal }).then((x) => x.text());
+      const html = await fetchPage(`/ship/schedule_fleet/${ym}`, { signal }).then((x) => x.text());
       return findSchedule(new DOMParser().parseFromString(html, 'text/html'));
     }, dead, label);
     if (!url) return;

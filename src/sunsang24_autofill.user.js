@@ -70,6 +70,7 @@
 //@@include ui_bar.html
     <form class="panel" hidden></form>`;
 //@@include ui_after.js
+//@@include net.js
 
 //@@include panel_ui.js
   function openPanel(note) {
@@ -107,7 +108,7 @@
     if (!cfg.date) return null;
     const ymOf = cfg.date.slice(0, 7).replace('-', '');
     const doc = location.pathname.endsWith(ymOf) ? document
-      : new DOMParser().parseFromString(await fetch(`/ship/schedule_fleet/${ymOf}`).then((r) => r.text()), 'text/html');
+      : new DOMParser().parseFromString(await fetchPage(`/ship/schedule_fleet/${ymOf}`).then((r) => r.text()), 'text/html');
     const url = findSchedule(doc);
     return !url ? null : url.includes('reservation_default_ready') ? 'default' : 'normal';
   }
@@ -124,10 +125,10 @@
     const pickBtn = (doc) => [...doc.querySelectorAll('button.btn_user_reservation[data-schedule_no]')].find((b) =>
       b.dataset.ship_status_code !== 'END_READY' && (!names.length || names.some((n) => (b.closest('td.ship_info')?.textContent || '').includes(n))));
     let btn = pickBtn(document);
-    if (!btn && cfg.date) btn = pickBtn(new DOMParser().parseFromString(await fetch(`/ship/schedule_fleet/${cfg.date.slice(0, 7).replace('-', '')}`).then((r) => r.text()), 'text/html'));
+    if (!btn && cfg.date) btn = pickBtn(new DOMParser().parseFromString(await fetchPage(`/ship/schedule_fleet/${cfg.date.slice(0, 7).replace('-', '')}`).then((r) => r.text()), 'text/html'));
     const url = btn && reserveUrl(btn);
     if (!url) return null; // 예약 화면을 못 찾음 (기억하지 않음)
-    const doc = new DOMParser().parseFromString(await fetch(url, { cache: 'no-store' }).then((r) => r.text()), 'text/html');
+    const doc = new DOMParser().parseFromString(await fetchPage(url).then((r) => r.text()), 'text/html');
     const src = doc.querySelector('.arrange_seating_wrap img')?.getAttribute('src') || '';
     cache[key] = src;
     try { localStorage.setItem(SEATIMG_KEY, JSON.stringify(cache)); } catch (e) { /* 무시 */ }
@@ -202,7 +203,7 @@
   // 로그인 확인: 마이페이지에 "로그아웃" 메뉴가 있으면 로그인 상태 (선상24는 배 사이트 주소마다 로그인이 따로)
   async function loggedIn() {
     try {
-      const html = await fetch('/mypage/my', { cache: 'no-store' }).then((r) => r.text());
+      const html = await fetchPage('/mypage/my').then((r) => r.text());
       return />\s*로그아웃\s*</.test(html);
     } catch (e) { return null; } // 확인 실패(혼잡 등)는 로그아웃으로 보지 않음
   }
@@ -232,10 +233,10 @@
     if (await loginLost()) return; // 확인 요청을 시작하기 직전에 한 번 더
     const url = await pollOverlap(async (signal) => {
       // 하루치 일정(사이트가 예약 완료 후 쓰는 요청)만 받아 확인: 한 달치 페이지보다 15~20배 작음
-      const r = await fetch(`/ship/schedule_fleet/${CONFIG.date}/0/simple_day1`, { cache: 'no-store', signal });
+      const r = await fetchPage(`/ship/schedule_fleet/${CONFIG.date}/0/simple_day1`, { signal });
       if (r.ok) return findInDay(new DOMParser().parseFromString(`<table>${await r.text()}</table>`, 'text/html'));
       // 하루치 요청이 안 되면 한 달치 일정 페이지로 확인
-      const html = await fetch(`/ship/schedule_fleet/${ym}`, { cache: 'no-store', signal }).then((x) => x.text());
+      const html = await fetchPage(`/ship/schedule_fleet/${ym}`, { signal }).then((x) => x.text());
       return findSchedule(new DOMParser().parseFromString(html, 'text/html'));
     }, dead, label);
     if (!url) return;

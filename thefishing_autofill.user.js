@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.21.1112-155609
+// @version      2.8.22.1112-161432
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -17,7 +17,19 @@
   // @match를 사이트 전체로 둔 이유: Chrome의 Tampermonkey가 "index.php*" 규칙으로 ?mid=bk 주소를 잡지 못함
   const isList = /^\/(index\.php)?$/.test(location.pathname) && new URLSearchParams(location.search).get('mid') === 'bk';
   const isStep1 = /^\/_core\/module\/reservation_boat_[^/]+\/popu[p2]\.step1\.php$/.test(location.pathname);
-  if (!isList && !isStep1) return;
+  const isStep2 = /^\/_core\/module\/reservation_boat_[^/]+\/popu[p2]\.step2\.php$/.test(location.pathname); // 예약확인 (최종 신청 화면)
+  if (!isList && !isStep1 && !isStep2) return;
+  // 예약확인 화면은 이 스크립트가 1단계를 자동으로 보낸 직후(이 탭에 표시, 5분 안)만 동작. 주소에 날짜·배 번호가 없어 따로 표시함
+  const STEP2_KEY = 'frs_step2';
+  let step2Target = '';
+  if (isStep2) {
+    try {
+      const s = JSON.parse(sessionStorage.getItem(STEP2_KEY) || 'null');
+      sessionStorage.removeItem(STEP2_KEY);
+      if (s && Date.now() - s.t < 5 * 60 * 1000) step2Target = s.target;
+    } catch (e) { /* 무시 */ }
+    if (!step2Target) return;
+  }
   // 예약 화면은 예약 목록 페이지에서 "예약 대기 시작"으로 넘어온 경우(이 탭에 시작 표시가 있을 때)만 동작.
   // 사이트의 "예약하기"로 직접 연 예약 화면에서는 아무것도 표시하지 않음 (설정·좌석 고르기는 예약 목록 페이지에서)
   if (isStep1) {
@@ -55,7 +67,7 @@
     { key: 'openAt', w: 2, label: '예약 오픈 시각', type: 'datetime', help: '비우면 시작하자마자 확인' },
     { key: 'startBeforeSec', w: 1, label: '몇 초 전부터 확인', type: 'number', min: 5, max: 600 },
     { key: 'pollMs', w: 1, label: '확인 간격(ms)', type: 'number', min: 300, max: 10000, help: '700~1000 권장' },
-    { key: 'autoSubmit', w: 4, label: '"예약 신청하기"까지 자동으로 누르기', type: 'check', danger: '켜면 확인 없이 실제로 예약됩니다. 연습할 때는 끄세요.' },
+    { key: 'autoSubmit', w: 4, label: '"예약 신청하기"·확인창·예약확인 단계의 "예약 신청하기"까지 자동으로 누르기 (최종 예약)', type: 'check', danger: '켜면 확인 없이 실제로 예약됩니다. 연습할 때는 끄세요.' },
   ];
   // =====================================================
 
@@ -753,7 +765,8 @@
   pp.querySelector('.pp-done').onclick = () => endPick(true);
 
   // 예약 화면에서는 이 배의 배별 설정(낚시종류·좌석)을 적용
-  const CONFIG = isStep1 ? forShip(loadConfig(), new URLSearchParams(location.search).get('PA_N_UID')) : loadConfig();
+  const CONFIG = isStep1 ? forShip(loadConfig(), new URLSearchParams(location.search).get('PA_N_UID'))
+    : isStep2 ? forShip(loadConfig(), step2Target.split('|')[1]) : loadConfig();
   // 자동 신청이 켜져 있으면 눈에 띄게: 상태 바의 "자동 신청 켜짐" + 화면 전체 빨간 테두리 깜빡임
   ui.querySelector('.auto').hidden = !CONFIG.autoSubmit;
   ui.querySelector('.autoframe').hidden = !CONFIG.autoSubmit;
@@ -1097,7 +1110,15 @@
     if (CONFIG.autoSubmit) {
       status(`${seats}, 인원 ${document.getElementById('BI_IN').value}명으로 예약 신청 중…`);
       if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
-      btn.click(); // 사이트의 form_check 검증을 거쳐 제출됨
+      // 사이트 확인창: "예약 신청하기 하시겠습니까?"는 확인하고, 그 순간 예약확인(2단계) 화면에서 마지막 버튼을 누르라는 표시를 남김.
+      // 대기자 확인창은 취소 (대기자로 신청하지 않음). 사이트 검증에 걸리면 확인창이 뜨지 않아 표시도 남지 않음
+      window.confirm = (m) => {
+        if (/대기자/.test(m)) { toast(`대기자 확인창이 떠서 자동 신청을 멈췄습니다: ${m}`); return false; }
+        try { sessionStorage.setItem(STEP2_KEY, JSON.stringify({ target: `${date}|${pa}`, t: Date.now() })); } catch (e) { /* 무시 */ }
+        console.log('[자동입력] 확인창 자동 승인:', m);
+        return true;
+      };
+      btn.click(); // 사이트의 form_check 검증 → 확인창 → 예약확인 화면으로
       return;
     }
     status(`입력 완료: ${seats}, 인원 ${document.getElementById('BI_IN').value}명. 내용을 확인하고 빨간 테두리 버튼을 누르세요.`);
@@ -1130,6 +1151,27 @@
     btn.onclick = () => { btn.hidden = true; panel.hidden = true; arm(`${date}|${pa}`); runStep1(); };
   }
 
+  // 4) 예약확인(2단계): 마지막 "예약 신청하기" (이 화면은 확인창 없이 바로 최종 신청됨).
+  // 1단계를 자동으로 보낸 경우에만 여기까지 옴 (맨 위에서 확인)
+  async function runStep2() {
+    const btn = document.getElementById('submit');
+    if (!btn || !CONFIG.autoSubmit) {
+      status('예약확인 단계입니다. 내용을 확인하고 "예약 신청하기"를 직접 누르세요.');
+      if (btn) markButton(btn);
+      return;
+    }
+    markButton(btn);
+    status('예약확인 단계: 마지막 "예약 신청하기"를 자동으로 누릅니다… (멈추려면 Esc)');
+    filling = true;
+    await sleep(300);
+    const go = await checkpoint(); // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 누르지 않음
+    filling = false;
+    if (!go) return;
+    status('예약확인 단계: "예약 신청하기"를 눌렀습니다. 결과 화면을 확인하세요.');
+    btn.click();
+  }
+
   if (isList) startOnList();
+  else if (isStep2) runStep2();
   else runStep1(); // 예약 화면은 시작 표시가 있을 때만 여기까지 옴 (맨 위에서 확인)
 })();

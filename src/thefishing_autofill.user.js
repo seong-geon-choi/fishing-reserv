@@ -47,7 +47,7 @@
     date: '', shipName: [],
     name: '', depositor: '', tel: ['', '', ''],
     people: 2, fishKeywords: [], seatGroups: [], fallbackAnySeat: true, partialSeats: false, minPeople: 1,
-    openAt: '', startBeforeSec: 10, pollMs: 1000, autoSubmit: false,
+    openAt: '', startBeforeSec: 10, pollMs: 1000, pollLimitMin: 60, autoSubmit: false,
     perShip: {}, // 배 번호(PA_N_UID)별 설정: { '3570': { fishKeywords, seatGroups, fallbackAnySeat } }
   };
   const FIELDS = [
@@ -66,6 +66,7 @@
     { key: 'openAt', w: 2, label: '예약 오픈 시각', type: 'datetime', help: '비우면 시작할 때 한 번만 확인 (안 열렸으면 안내하고 멈춤)' },
     { key: 'startBeforeSec', w: 1, label: '몇 초 전부터 확인', type: 'number', min: 5, max: 600 },
     { key: 'pollMs', w: 1, label: '확인 간격(ms)', type: 'number', min: 500, max: 10000, help: '1000 이상 권장' },
+//@@include fields_limit.js
     { key: 'autoSubmit', w: 4, label: '예약확인 단계의 마지막 "예약 신청하기"까지 자동으로 누르기 (최종 예약)', type: 'check', danger: '켜면 확인 없이 실제로 예약됩니다. 연습할 때는 끄세요.' },
   ];
   // =====================================================
@@ -605,7 +606,14 @@
       const found = fishRadios(new DOMParser().parseFromString(html, 'text/html'));
       return found.length ? found : null;
     }, dead, `${date}${openLabel}`);
-    if (!radios) return;
+    if (!radios) {
+      if (pollTimedOut) {
+        // 최대 확인 시간이 지나 멈춤: 이 탭의 시작 표시도 지워 새로고침돼도 다시 시작하지 않게 하고, 시작 버튼 다시 표시
+        try { sessionStorage.removeItem(TARGET_KEY); } catch (e) { /* 무시 */ }
+        showStep1Start(pollLimitMsg());
+      }
+      return;
+    }
     if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
     // 받은 화면에서 낚시종류를 골라, 그 종류가 선택된 예약 화면으로 바로 이동 (새로고침 + 선택 페이지 로딩 2번 → 1번)
     stopBtn.hidden = true;

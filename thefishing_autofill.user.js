@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.30.1113-112626
+// @version      2.8.31.1113-133137
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -47,7 +47,7 @@
     date: '', shipName: [],
     name: '', depositor: '', tel: ['', '', ''],
     people: 2, fishKeywords: [], seatGroups: [], fallbackAnySeat: true, partialSeats: false, minPeople: 1,
-    openAt: '', startBeforeSec: 10, pollMs: 1000, autoSubmit: false,
+    openAt: '', startBeforeSec: 10, pollMs: 1000, pollLimitMin: 60, autoSubmit: false,
     perShip: {}, // 배 번호(PA_N_UID)별 설정: { '3570': { fishKeywords, seatGroups, fallbackAnySeat } }
   };
   const FIELDS = [
@@ -67,6 +67,7 @@
     { key: 'openAt', w: 2, label: '예약 오픈 시각', type: 'datetime', help: '비우면 시작할 때 한 번만 확인 (안 열렸으면 안내하고 멈춤)' },
     { key: 'startBeforeSec', w: 1, label: '몇 초 전부터 확인', type: 'number', min: 5, max: 600 },
     { key: 'pollMs', w: 1, label: '확인 간격(ms)', type: 'number', min: 500, max: 10000, help: '1000 이상 권장' },
+    { key: 'pollLimitMin', w: 1, label: '최대 확인 시간(분)', type: 'number', min: 5, max: 240, help: '확인을 시작하고 이 시간이 지나도 안 열리면 멈춤' },
     { key: 'autoSubmit', w: 4, label: '예약확인 단계의 마지막 "예약 신청하기"까지 자동으로 누르기 (최종 예약)', type: 'check', danger: '켜면 확인 없이 실제로 예약됩니다. 연습할 때는 끄세요.' },
   ];
   // =====================================================
@@ -921,11 +922,19 @@
     return gap * (0.8 + Math.random() * 0.4);
   }
 
+  // ---------- 확인 시간 상한: 브라우저를 켜 두고 잊어도 요청이 끝없이 가지 않게, 확인을 시작하고 설정한 시간(기본 60분)이 지나면 멈춤 ----------
+  // (요청이 없는 카운트다운은 길어도 괜찮으므로 세지 않음)
+  const pollLimitMin = () => Math.max(5, CONFIG.pollLimitMin || 60);
+  const pollLimitMsg = () => `확인을 시작한 지 ${pollLimitMin()}분이 지나도 예약이 열리지 않아 자동으로 멈췄습니다(사이트 차단 방지). 다시 하려면 "예약 대기 시작"을 누르세요.`;
+  let pollTimedOut = false; // 마지막 확인이 시간 상한으로 끝났는지
+
   // ---------- 겹쳐 보내기: 응답이 늦어도 끊지 않고 기다리되, 5초 넘게 응답이 없으면 하나 더 보냄 (최대 2개) ----------
   // probe(signal) → 열렸으면 결과, 아니면 null
   async function pollOverlap(probe, dead, label) {
     const MAX_INFLIGHT = 2, STAGGER_MS = 5000, ASK_AFTER_MS = 60000; // 사이트가 느릴 때 더 몰아붙이지 않게 최대 2개
     let found = null, sent = 0, lastSent = 0, gap = 0;
+    const started = Date.now();
+    pollTimedOut = false;
     const reqs = new Set(); // 응답을 기다리는 요청: { ctl, deadline }
     const fire = () => {
       sent++; lastSent = Date.now(); gap = pollGap();
@@ -940,6 +949,7 @@
     ask.querySelector(".wait1").onclick = () => { for (const r of reqs) r.deadline = Date.now() + ASK_AFTER_MS; ask.hidden = true; };
     ask.querySelector(".cut").onclick = () => { for (const r of overdue()) r.ctl.abort(); ask.hidden = true; };
     while (!found && !dead()) {
+      if (Date.now() - started >= pollLimitMin() * 60000) { pollTimedOut = true; stopped = true; stopBtn.hidden = true; status(pollLimitMsg()); break; }
       const since = Date.now() - lastSent;
       if ((reqs.size === 0 && since >= gap) || (reqs.size > 0 && reqs.size < MAX_INFLIGHT && since >= STAGGER_MS)) fire();
       const late = overdue().length;
@@ -1052,7 +1062,14 @@
       const found = fishRadios(new DOMParser().parseFromString(html, 'text/html'));
       return found.length ? found : null;
     }, dead, `${date}${openLabel}`);
-    if (!radios) return;
+    if (!radios) {
+      if (pollTimedOut) {
+        // 최대 확인 시간이 지나 멈춤: 이 탭의 시작 표시도 지워 새로고침돼도 다시 시작하지 않게 하고, 시작 버튼 다시 표시
+        try { sessionStorage.removeItem(TARGET_KEY); } catch (e) { /* 무시 */ }
+        showStep1Start(pollLimitMsg());
+      }
+      return;
+    }
     if (!(await checkpoint())) return; // 긴급 정지 확인창이 떠 있으면 기다리고, 정지했으면 여기서 멈춤
     // 받은 화면에서 낚시종류를 골라, 그 종류가 선택된 예약 화면으로 바로 이동 (새로고침 + 선택 페이지 로딩 2번 → 1번)
     stopBtn.hidden = true;

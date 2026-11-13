@@ -31,7 +31,7 @@
   const DEFAULTS = {
     date: '', shipName: [], fishKeywords: [], people: 2, name: '', depositor: '', phone: ['', '', ''],
     seatGroups: [], fallbackAnySeat: true, partialSeats: false, minPeople: 1,
-    openAt: '', startBeforeSec: 10, pollMs: 1000, autoSubmit: false,
+    openAt: '', startBeforeSec: 10, pollMs: 1000, pollLimitMin: 60, autoSubmit: false,
   };
   const FIELDS = [
     { key: 'date', w: 1, label: '출조일', type: 'date', required: true },
@@ -49,6 +49,7 @@
     { key: 'openAt', w: 2, label: '예약 오픈 시각', type: 'datetime', help: '비우면 시작할 때 한 번만 확인 (안 열렸으면 안내하고 멈춤)' },
     { key: 'startBeforeSec', w: 1, label: '몇 초 전부터 확인', type: 'number', min: 5, max: 600 },
     { key: 'pollMs', w: 1, label: '확인 간격(ms)', type: 'number', min: 500, max: 10000, help: '1000 이상 권장' },
+//@@include fields_limit.js
     { key: 'autoSubmit', w: 4, label: '"예약하기"와 확인창까지 자동으로 누르기', type: 'check', danger: '켜면 확인 없이 실제로 예약됩니다. 연습할 때는 끄세요.' },
   ];
   // =====================================================
@@ -258,7 +259,7 @@
       return goReserve(url);
     }
     const url = await pollOverlap(probe, dead, label);
-    if (!url) return;
+    if (!url) { if (pollTimedOut) showStart(pollLimitMsg()); return; } // 최대 확인 시간이 지나 멈춤: 시작 버튼 다시 표시
     return goReserve(url);
   }
   // 오픈 시각 없이 시작했는데 아직 안 열림

@@ -56,11 +56,19 @@
     return gap * (0.8 + Math.random() * 0.4);
   }
 
+  // ---------- 확인 시간 상한: 브라우저를 켜 두고 잊어도 요청이 끝없이 가지 않게, 확인을 시작하고 설정한 시간(기본 60분)이 지나면 멈춤 ----------
+  // (요청이 없는 카운트다운은 길어도 괜찮으므로 세지 않음)
+  const pollLimitMin = () => Math.max(5, CONFIG.pollLimitMin || 60);
+  const pollLimitMsg = () => `확인을 시작한 지 ${pollLimitMin()}분이 지나도 예약이 열리지 않아 자동으로 멈췄습니다(사이트 차단 방지). 다시 하려면 "예약 대기 시작"을 누르세요.`;
+  let pollTimedOut = false; // 마지막 확인이 시간 상한으로 끝났는지
+
   // ---------- 겹쳐 보내기: 응답이 늦어도 끊지 않고 기다리되, 5초 넘게 응답이 없으면 하나 더 보냄 (최대 2개) ----------
   // probe(signal) → 열렸으면 결과, 아니면 null
   async function pollOverlap(probe, dead, label) {
     const MAX_INFLIGHT = 2, STAGGER_MS = 5000, ASK_AFTER_MS = 60000; // 사이트가 느릴 때 더 몰아붙이지 않게 최대 2개
     let found = null, sent = 0, lastSent = 0, gap = 0;
+    const started = Date.now();
+    pollTimedOut = false;
     const reqs = new Set(); // 응답을 기다리는 요청: { ctl, deadline }
     const fire = () => {
       sent++; lastSent = Date.now(); gap = pollGap();
@@ -75,6 +83,7 @@
     ask.querySelector(".wait1").onclick = () => { for (const r of reqs) r.deadline = Date.now() + ASK_AFTER_MS; ask.hidden = true; };
     ask.querySelector(".cut").onclick = () => { for (const r of overdue()) r.ctl.abort(); ask.hidden = true; };
     while (!found && !dead()) {
+      if (Date.now() - started >= pollLimitMin() * 60000) { pollTimedOut = true; stopped = true; stopBtn.hidden = true; status(pollLimitMsg()); break; }
       const since = Date.now() - lastSent;
       if ((reqs.size === 0 && since >= gap) || (reqs.size > 0 && reqs.size < MAX_INFLIGHT && since >= STAGGER_MS)) fire();
       const late = overdue().length;

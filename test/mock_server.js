@@ -51,7 +51,8 @@ const record = (site, info) => { S.log.push({ at: new Date().toLocaleTimeString(
 function tfList() {
   const links = Object.entries(TF_SHIPS).map(([id, s]) => `<li><a href="/index.php?mid=bk&PA_N_UID=${id}">${s.name}</a></li>`).join('');
   return page('예약하기 - 연습용 더피싱', `<h2>예약 목록 (연습용)</h2><ul>${links}</ul>
-    <p><button onclick="window.open('${MOD}/popup.step1.php?date=20261120&PA_N_UID=3570')">예약하기</button></p>`, 'thefishing_autofill.user.js');
+    <table>${['20261120', '20261122', '20261125'].map((d) => `<tr><td>${d}</td><td>만석호 <a href="javascript:;" onclick="f_popup('${MOD}/popup.step1.php?date=${d}&PA_N_UID=3570','bk','1280','1000');">예약하기</a></td></tr>`).join('')}</table>
+    <script>function f_popup(u){ window.open(u); }</script>`, 'thefishing_autofill.user.js');
 }
 function tfStep1(q) {
   const date = q.get('date'), pa = q.get('PA_N_UID'), ps = q.get('PS_N_UID');

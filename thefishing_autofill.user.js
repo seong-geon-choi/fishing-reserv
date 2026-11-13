@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.29.1113-112032
+// @version      2.8.30.1113-112626
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -541,7 +541,6 @@
       || (document.querySelector('[onclick*="popup.step1.php"]')?.getAttribute('onclick') || '').match(/\/_core\/module\/([^/]+)\//);
     return m ? m[1] : 'reservation_boat_v5.2_seat1';
   }
-  const ymd = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
   const parseHtml = (h) => new DOMParser().parseFromString(h, 'text/html');
   const radiosIn = (doc) => [...doc.querySelectorAll('input[type=radio][name=PS_N_UID]')];
 
@@ -552,32 +551,33 @@
     let cache = {};
     try { cache = JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}'); } catch (e) { /* 무시 */ }
     if (cache[shipId] && Date.now() - cache[shipId].t < 30 * 60 * 1000) return cache[shipId];
-    const dates = await findOpenDates(shipId, () => {}, 1, () => true);
-    if (!dates.length) return null;
-    cache[shipId] = { ds: dates[0].ds, seats: await loadSeats(dates[0].url), t: Date.now() };
+    const d = openDatesHere(shipId)[0];
+    if (!d) return null;
+    cache[shipId] = { ds: d.ds, seats: await loadSeats(await seatUrl(shipId, d)), t: Date.now() };
     try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(cache)); } catch (e) { /* 무시 */ }
     return cache[shipId];
   }
 
-  // 예약 가능한 날짜 찾기: 오늘부터 하루씩 차례로 확인 (사이트에 부담 주지 않게 한 번에 하나, 0.4초 간격), 최대 60일 · want개까지
-  // want: 찾을 날짜 수, alive: 계속 찾을지 (좌석 고르기 창을 닫으면 멈춤)
-  async function findOpenDates(shipId, onFound, want = 4, alive = () => !!pick) {
-    const found = [];
-    const today = new Date();
-    for (let j = 0; j < 60 && found.length < want && alive() && !blocked; j++) {
-      if (j) await sleep(400);
-      const d = new Date(today); d.setDate(today.getDate() + j);
-      const ds = ymd(d);
-      let h;
-      try { h = await fetchPage(stepUrl(`date=${ds}&PA_N_UID=${shipId}`)).then((r) => r.text()); } catch (e) { continue; }
-      const r0 = radiosIn(parseHtml(h)).find((r) => !r.disabled);
-      if (!r0) continue;
-      const m = (r0.getAttribute('onclick') || '').match(/ps_url\('(\d+)',\s*'(\d+)',\s*'(\d*)',\s*'(\d+)'\)/);
-      const [dd, p, ph, ps] = m ? m.slice(1) : [ds, shipId, '0', r0.value];
-      found.push({ ds, url: stepUrl(`date=${dd}&PA_N_UID=${p}&PH_N_UID=${ph || 0}&PS_N_UID=${ps}`) });
-      onFound(found);
+  // 예약이 열린 날짜: 지금 보고 있는 예약 목록 화면의 "예약하기" 버튼(…popup.step1.php?date=…&PA_N_UID=…)에서 읽음 (사이트 요청 없음).
+  // 배 이름을 눌러 그 배만 보는 목록 화면이면 그 배의 여러 날짜가 나옴 (보기 일수는 사이트 화면의 "일 이후까지 보기"에서)
+  function openDatesHere(shipId) {
+    const ds = new Set();
+    for (const el of document.querySelectorAll('[onclick*="popup.step1.php"], a[href*="popup.step1.php"]')) {
+      const s = el.getAttribute('onclick') || el.getAttribute('href') || '';
+      const d = (s.match(/date=(\d{8})/) || [])[1];
+      if (d && (s.match(/PA_N_UID=(\d+)/) || [])[1] === String(shipId)) ds.add(d);
     }
-    return found;
+    return [...ds].sort().map((d) => ({ ds: d, url: null, seats: null }));
+  }
+  // 그 날짜의 좌석판 주소: 낚시종류 선택 화면을 한 번 받아 첫 낚시종류가 선택된 주소로 (날짜마다 한 번만)
+  async function seatUrl(shipId, d) {
+    if (d.url) return d.url;
+    const r0 = radiosIn(parseHtml(await fetchPage(stepUrl(`date=${d.ds}&PA_N_UID=${shipId}`)).then((r) => r.text()))).find((r) => !r.disabled);
+    if (!r0) throw new Error('no fish');
+    const m = (r0.getAttribute('onclick') || '').match(/ps_url\('(\d+)',\s*'(\d+)',\s*'(\d*)',\s*'(\d+)'\)/);
+    const [dd, p, ph, ps] = m ? m.slice(1) : [d.ds, shipId, '0', r0.value];
+    d.url = stepUrl(`date=${dd}&PA_N_UID=${p}&PH_N_UID=${ph || 0}&PS_N_UID=${ps}`);
+    return d.url;
   }
 
   // 그 날 좌석 배치 읽기: 칸 번호(res_seatNN) + 좌석 번호 + 이미 예약됐는지
@@ -652,7 +652,9 @@
     mapMsg.textContent = '배 그림을 불러오는 중…';
     renderDates();
     try {
-      const seats = await loadSeats(pick.dates[i].url);
+      // 한 번 본 날짜의 좌석은 창을 닫을 때까지 기억 (날짜를 다시 눌러도 사이트에 다시 묻지 않음)
+      const d = pick.dates[i];
+      const seats = d.seats || (d.seats = await loadSeats(await seatUrl(pick.ship.id, d)));
       if (!pick || pick.cur !== i) return;
       pick.seats = seats;
       mapMsg.hidden = !!seats.length;
@@ -749,14 +751,10 @@
     pp.querySelector('.pp-title').textContent = `배 그림에서 좌석 고르기 · ${ship.name}`;
     svg.toggleAttribute('hidden', true);
     mapMsg.hidden = false;
-    mapMsg.textContent = '예약 가능한 날짜를 찾는 중… (예약 화면을 보기만 하고, 예약은 하지 않습니다)';
+    pick.dates = openDatesHere(ship.id);
     renderPick();
-    const dates = await findOpenDates(ship.id, (list) => {
-      if (!pick) return;
-      pick.dates = list.slice();
-      if (pick.cur < 0) showDate(0); else renderDates();
-    });
-    if (pick && !dates.length) mapMsg.textContent = '앞으로 60일 안에 예약이 열린 날짜가 없어 배 그림을 가져오지 못했습니다. 좌석 그룹 칸에 번호를 직접 적거나 좌석 시뮬레이터를 이용하세요.';
+    if (pick.dates.length) { showDate(0); return; }
+    mapMsg.textContent = `이 화면에는 ${ship.name}의 예약 가능한 날짜("예약하기" 버튼)가 없습니다. 예약 목록에서 배 이름 "${ship.name}"을 눌러 그 배의 일정 화면을 연 뒤(필요하면 화면의 "일 이후까지 보기"를 늘려서) 다시 여세요. 좌석 그룹 칸에 번호를 직접 적거나 좌석 시뮬레이터를 이용해도 됩니다.`;
   }
   function endPick(apply) {
     if (!pick) return;

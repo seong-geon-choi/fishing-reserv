@@ -47,7 +47,7 @@
     date: '', shipName: [],
     name: '', depositor: '', tel: ['', '', ''],
     people: 2, fishKeywords: [], seatGroups: [], fallbackAnySeat: true, partialSeats: false, minPeople: 1,
-    openAt: '', startBeforeSec: 30, pollMs: 1000, autoSubmit: false,
+    openAt: '', startBeforeSec: 10, pollMs: 1000, autoSubmit: false,
     perShip: {}, // 배 번호(PA_N_UID)별 설정: { '3570': { fishKeywords, seatGroups, fallbackAnySeat } }
   };
   const FIELDS = [

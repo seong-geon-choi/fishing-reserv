@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         더피싱 예약 자동입력 (만석호·나대세호·팀루피호·하이피싱호 등)
 // @namespace    reserv
-// @version      2.8.28.1112-175321
+// @version      2.8.29.1113-112032
 // @description  예약 목록에서 날짜·배 선택 → 예약 오픈 대기 → 낚시종류 선택 → 좌석/인원 → 예약자 정보 → 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.thefishing.kr/*
 // @grant        none
@@ -47,7 +47,7 @@
     date: '', shipName: [],
     name: '', depositor: '', tel: ['', '', ''],
     people: 2, fishKeywords: [], seatGroups: [], fallbackAnySeat: true, partialSeats: false, minPeople: 1,
-    openAt: '', startBeforeSec: 30, pollMs: 1000, autoSubmit: false,
+    openAt: '', startBeforeSec: 10, pollMs: 1000, autoSubmit: false,
     perShip: {}, // 배 번호(PA_N_UID)별 설정: { '3570': { fishKeywords, seatGroups, fallbackAnySeat } }
   };
   const FIELDS = [
@@ -318,10 +318,16 @@
   const isBlockedPage = () => /^(403 Forbidden|429 Too Many Requests)$/.test(document.title.trim())
     || /You don't have permission to access/.test(document.body?.textContent || '');
   let blocked = false;
+  let netErrors = 0; // 사이트 오류(5xx 등)·연결 실패가 연달아 난 횟수 (오픈 확인 간격을 늘리는 데 씀)
   // 사이트 페이지 받기: 차단 응답이면 모든 대기·요청을 멈추고 알림
   async function fetchPage(url, opts = {}) {
     if (blocked) throw new Error('blocked');
-    const r = await fetch(url, { cache: 'no-store', ...opts });
+    let r;
+    try { r = await fetch(url, { cache: 'no-store', ...opts }); } catch (e) {
+      if (e.name !== 'AbortError') netErrors++; // 직접 끊은 요청은 사이트 문제가 아님
+      throw e;
+    }
+    netErrors = r.ok ? 0 : netErrors + 1;
     if (r.status === 403 || r.status === 429) {
       blocked = true;
       stopped = true; // 대기·겹쳐 보내기·다시 열기가 이 표시를 보고 멈춤
@@ -902,14 +908,29 @@
       ? ` · 서버 시계 기준(PC가 ${Math.round(Math.abs(clockOffset) / 1000)}초 ${clockOffset > 0 ? '늦음' : '빠름'})` : '';
   }
 
-  // ---------- 겹쳐 보내기: 응답이 늦어도 끊지 않고 기다리되, 5초 넘게 응답이 없으면 하나 더 보냄 (최대 3개) ----------
+  // ---------- 오픈 확인 간격 (사이트 차단을 피하려고 필요한 때만 빠르게) ----------
+  // 오픈 10초 전까지는 3초, 오픈 직전·직후 1분은 설정값(최소 0.5초), 오픈 1분이 지나도 안 열리면 2→3→5초로 늘림.
+  // 사이트 오류가 이어지면 2배씩 늘림(최대 8초). 일정한 기계적 간격이 드러나지 않게 ±20% 흔들림
+  function pollGap() {
+    const fast = Math.max(500, CONFIG.pollMs);
+    let gap = fast;
+    if (CONFIG.openAt) {
+      const t = serverNow() - new Date(CONFIG.openAt).getTime(); // 오픈 기준 (음수 = 오픈 전)
+      if (t < -10000) gap = Math.max(fast, 3000);
+      else if (t >= 60000) gap = Math.max(fast, t < 120000 ? 2000 : t < 180000 ? 3000 : 5000);
+    }
+    gap = Math.min(gap * 2 ** Math.min(netErrors, 3), Math.max(8000, gap));
+    return gap * (0.8 + Math.random() * 0.4);
+  }
+
+  // ---------- 겹쳐 보내기: 응답이 늦어도 끊지 않고 기다리되, 5초 넘게 응답이 없으면 하나 더 보냄 (최대 2개) ----------
   // probe(signal) → 열렸으면 결과, 아니면 null
   async function pollOverlap(probe, dead, label) {
-    const MAX_INFLIGHT = 3, STAGGER_MS = 5000, ASK_AFTER_MS = 60000;
-    let found = null, sent = 0, lastSent = 0;
+    const MAX_INFLIGHT = 2, STAGGER_MS = 5000, ASK_AFTER_MS = 60000; // 사이트가 느릴 때 더 몰아붙이지 않게 최대 2개
+    let found = null, sent = 0, lastSent = 0, gap = 0;
     const reqs = new Set(); // 응답을 기다리는 요청: { ctl, deadline }
     const fire = () => {
-      sent++; lastSent = Date.now();
+      sent++; lastSent = Date.now(); gap = pollGap();
       const req = { ctl: new AbortController(), deadline: Date.now() + ASK_AFTER_MS };
       reqs.add(req);
       probe(req.ctl.signal).then((r) => { if (r && !found) found = r; }).catch(() => {}).finally(() => reqs.delete(req));
@@ -922,10 +943,10 @@
     ask.querySelector(".cut").onclick = () => { for (const r of overdue()) r.ctl.abort(); ask.hidden = true; };
     while (!found && !dead()) {
       const since = Date.now() - lastSent;
-      if ((reqs.size === 0 && since >= Math.max(500, CONFIG.pollMs)) || (reqs.size > 0 && reqs.size < MAX_INFLIGHT && since >= STAGGER_MS)) fire();
+      if ((reqs.size === 0 && since >= gap) || (reqs.size > 0 && reqs.size < MAX_INFLIGHT && since >= STAGGER_MS)) fire();
       const late = overdue().length;
       ask.hidden = !late;
-      status(`${label} 오픈 대기 중… (${sent}회 확인)${reqs.size > 1 ? ` · 사이트 응답 지연, 응답 대기 ${reqs.size}개` : ""}${late ? ` · ${late}개 요청이 1분 넘게 응답이 없습니다. 더 기다릴까요?` : ""}`);
+      status(`${label} 오픈 대기 중… (${sent}회 확인, 약 ${(gap / 1000).toFixed(1)}초 간격)${reqs.size > 1 ? ` · 사이트 응답 지연, 응답 대기 ${reqs.size}개` : ""}${late ? ` · ${late}개 요청이 1분 넘게 응답이 없습니다. 더 기다릴까요?` : ""}`);
       await sleep(100);
     }
     ask.hidden = true;

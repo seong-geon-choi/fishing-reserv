@@ -4,10 +4,16 @@
   const isBlockedPage = () => /^(403 Forbidden|429 Too Many Requests)$/.test(document.title.trim())
     || /You don't have permission to access/.test(document.body?.textContent || '');
   let blocked = false;
+  let netErrors = 0; // 사이트 오류(5xx 등)·연결 실패가 연달아 난 횟수 (오픈 확인 간격을 늘리는 데 씀)
   // 사이트 페이지 받기: 차단 응답이면 모든 대기·요청을 멈추고 알림
   async function fetchPage(url, opts = {}) {
     if (blocked) throw new Error('blocked');
-    const r = await fetch(url, { cache: 'no-store', ...opts });
+    let r;
+    try { r = await fetch(url, { cache: 'no-store', ...opts }); } catch (e) {
+      if (e.name !== 'AbortError') netErrors++; // 직접 끊은 요청은 사이트 문제가 아님
+      throw e;
+    }
+    netErrors = r.ok ? 0 : netErrors + 1;
     if (r.status === 403 || r.status === 429) {
       blocked = true;
       stopped = true; // 대기·겹쳐 보내기·다시 열기가 이 표시를 보고 멈춤

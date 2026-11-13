@@ -31,7 +31,7 @@
   const DEFAULTS = {
     date: '', shipName: [], fishKeywords: [], people: 2, name: '', depositor: '', phone: ['', '', ''],
     seatGroups: [], fallbackAnySeat: true, partialSeats: false, minPeople: 1,
-    openAt: '', startBeforeSec: 30, pollMs: 1000, autoSubmit: false,
+    openAt: '', startBeforeSec: 10, pollMs: 1000, autoSubmit: false,
   };
   const FIELDS = [
     { key: 'date', w: 1, label: '출조일', type: 'date', required: true },

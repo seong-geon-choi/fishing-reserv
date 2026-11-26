@@ -133,12 +133,16 @@ function ssSchedule() {
     <h2>출항일정 (연습용)</h2><table>${ssRow()}</table>
     <script>document.addEventListener('click', function(e){ var b = e.target.closest('.btn_user_reservation'); if (b) location.href = '/mypage/reservation_ready/' + b.dataset.schedule_no; });</script>`, 'sunsang24_autofill.user.js');
 }
-function ssReserve() {
+// 선택출항: 실제 사이트처럼 낚시종류를 누르면 그 종류의 예약 화면으로 새로 이동 (주소 끝 번호 = 종류)
+const SS_FISH = [[801, '신규'], [802, '봄쭈꾸미'], [803, '광어우럭']];
+const ssFish = (no) => `<ul>${SS_FISH.map(([v, t]) => `<li><label><input type="radio" name="default_schedule_no" value="${v}"${v === (no || SS_FISH[0][0]) ? ' checked' : ''}> <span class="fish">${t}</span></label></li>`).join('')}</ul>
+    <script>document.querySelectorAll('input[name=default_schedule_no]').forEach(function(r){ r.addEventListener('click', function(){ location.href = '/mypage/reservation_default_ready/${SS_DATE}/77/' + r.value; }); });</script>`;
+function ssReserve(fishNo) {
   if (S.broken > 0) { S.broken--; return page('예약', '<p>(일부만 그려진 화면)</p>', 'sunsang24_autofill.user.js'); }
   const seats = Array.from({ length: 20 }, (_, i) => i + 1).filter((n) => !S.ssTaken.has(n))
     .map((n) => `<label><input type="checkbox" name="select_seat_nos[]" value="${n}"> ${n}</label>`).join(' ');
   const pay = S.ssLoggedIn ? '<button type="button" id="btn_payment" class="btn_payment">예약하기</button>' : '<button type="button" class="btn_payment">로그인 후 예약하기</button>';
-  return page('테스트호 예약', `<h2>테스트호 ${SS_DATE} 예약</h2>
+  return page('테스트호 예약', `<h2>테스트호 ${SS_DATE} 예약</h2>${fishNo !== undefined ? ssFish(fishNo) : ''}
     <script>var data = { schedule: { remain_embarkation_num: ${S.ssRemain}, person_per_reservation: ${S.ssPerReservation} } };</script>
     <dl><dt class="num_modify"><a class="minus" href="javascript:;">−</a> <span class="people_count">1</span> <a class="plus" href="javascript:;">+</a></dt></dl>
     <input type="hidden" name="person_count" value="1">
@@ -226,6 +230,7 @@ http.createServer(async (req, res) => {
     if (/^\/ship\/schedule_fleet\/\d{4}-\d{2}-\d{2}\/0\/simple_day1$/.test(p)) { if (S.slowMs) await sleep(S.slowMs); if (S.dayFail) return send(res, 500, 'error'); return send(res, 200, p.includes(SS_DATE) ? ssRow() : ''); }
     if (p === '/mypage/my') return send(res, 200, page('마이페이지', S.ssLoggedIn ? '<a href="#">로그아웃</a>' : '<a href="#">로그인</a>'));
     if (p === '/mypage/reservation_ready/5001') return send(res, 200, ssReserve());
+    { const m = p.match(new RegExp(`^/mypage/reservation_default_ready/${SS_DATE}/77(?:/(\\d+))?$`)); if (m) return send(res, 200, ssReserve(m[1] ? +m[1] : 0)); }
     if (p === '/mypage/reservation_end/1') {
       const b = await readBody(req);
       record('sunsang24', { date: SS_DATE, people: b.get('people'), seats: b.get('seats'), name: b.get('name') });

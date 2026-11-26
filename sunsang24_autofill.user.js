@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         선상24 예약 자동입력 (빅보스호·가가호 등)
 // @namespace    reserv
-// @version      2.5.29.1113-133137
+// @version      2.5.30.1126-114654
 // @description  일정 페이지에서 예약 오픈 대기 → 예약 화면 이동 → 인원/예약자/약관 동의까지 자동. 화면 위 "설정" 버튼에서 정보를 입력하세요.
 // @match        https://*.sunsang24.com/ship/schedule_fleet*
 // @match        https://*.sunsang24.com/mypage/reservation_ready/*
@@ -792,7 +792,16 @@
     if (fishRadios.length && CONFIG.fishKeywords.length) {
       const fish = fishByKeyword(fishRadios, fishText);
       if (!fish) toast(`낚시종류 키워드(${CONFIG.fishKeywords.join(', ')})에 맞는 종류가 없어 화면에 선택된 종류로 진행합니다`);
-      else if (!fish.checked) { fish.click(); await sleep(200); }
+      else if (!fish.checked) {
+        // 선상24는 낚시종류를 누르면 그 종류의 예약 화면(…/날짜/배번호/종류번호)으로 새로 이동함.
+        // 이동한 화면에서 이어서 입력하도록 시작 표시를 그 주소로 남김 (이동하지 않는 화면이면 그대로 진행)
+        const base = location.pathname.match(/^\/mypage\/reservation_default_ready\/[^/]+\/[^/]+/)?.[0];
+        if (base) try { sessionStorage.setItem(FLAG, `${base}/${fish.value}`); } catch (e) { /* 무시 */ }
+        status(`낚시종류 ${fishText(fish)}(으)로 바꾸는 중…`);
+        fish.click();
+        await sleep(1500);
+        try { sessionStorage.removeItem(FLAG); } catch (e) { /* 무시 */ }
+      }
     }
 
     // 인원: +/− 버튼을 눌러 맞춤. 최대 인원을 넘겨 누르면 사이트가 경고창을 띄워 멈추므로, 최대 인원을 먼저 알아내 그 이상은 누르지 않음
